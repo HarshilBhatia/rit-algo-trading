@@ -10,8 +10,7 @@ import numpy as np
 import pickle 
 from tabulate import tabulate
 import time 
-
-from utils import *
+from utils import * 
 '''
 If you are not familiar with Python or feeling a little bit rusty, highly recommend you to go through the following link:
     https://github.com/trekhleb/learn-python
@@ -25,50 +24,6 @@ The core of this case is to design algorithmic trading strategies that exploit a
 and its underlying stocks (BULL and BEAR), while effectively using tender offers and conversion tools to avoid speculative risk
 and maximize returns.
 '''
-
-API = "http://localhost:9990/v1"
-
-API_KEY = "PA83Q8EP"                     # <-- your key
-HDRS = {"X-API-key": API_KEY}          # change to X-API-Key if your server needs it
-import datetime
-
-# Tickers
-CAD  = "CAD"    # currency instrument quoted in CAD
-USD  = "USD"    # price of 1 USD in CAD (i.e., USD/CAD)
-BULL = "BULL"   # stock in CAD
-BEAR = "BEAR"   # stock in CAD
-RITC = "RITC"   # ETF quoted in USD
-
-# Per problem statement
-FEE_MKT = 0.02           # $/share (market)
-REBATE_LMT = 0.01        # $/share (passive) - not used in this baseline
-MAX_SIZE_EQUITY = 10000 # per order for BULL/BEAR/RITC
-MAX_SIZE_FX = 2500000  # per order for CAD/USD
-
-# Basic risk guardrails (adjust as needed)
-MAX_LONG_NET  = 25000
-MAX_SHORT_NET = -25000
-MAX_GROSS     = 500000
-ORDER_QTY     = 5000    # child order size for arb legs
-
-# Cushion to beat fees & slippage.
-# 3 legs with market orders => ~0.06 CAD/sh cost; add a bit more for safety.
-ARB_THRESHOLD_CAD = 0.07
-
-# New constants for tender handling
-PROFIT_THRESHOLD_PCT = 0.005  # 0.5% min profit
-CONVERTER_COST = 1500
-CONVERTER_BATCH = 10000
-IMPACT_FACTOR = 0.01  # $0.01 per 1k shares beyond depth
-LIQUIDITY_THRESHOLD = 5000  # min depth for direct trades
-
-
-tender_ids_eval = set() 
-
-
-# --------- SESSION ----------
-s = requests.Session()
-s.headers.update(HDRS)
 
 
 # New evaluation function for Step 2
@@ -108,9 +63,6 @@ def evaluate_tender_profit(tender, usd, bull, bear, ritc):
         for level_bull, level_bear in zip(bull_asks, bear_asks):
             q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
             profit = q* (p_tender - (level_bull['price'] + level_bear['price'])) - CONVERTER_COST * q / 10000 # this should be per 10000.
-            # profits_stocks.append({'level_price_bull': level_bull['price'], 'level_qty_bull': level_bull['quantity'], 
-            #                        'level_price_bear': level_bear['price'], 'level_qty_bear': level_bear['quantity'],
-            #                        'profit': profit})
             profits.append({'type': 'S',
                                    'level_price ': level_bull['price'] + level_bear['price'],
                                    'level_qty': q,
@@ -122,9 +74,7 @@ def evaluate_tender_profit(tender, usd, bull, bear, ritc):
             q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
             profit = q* ((level_bull['price'] + level_bear['price'])  - p_tender) - CONVERTER_COST # this should be per 10000.
             profits.append({
-                # 'level_price_bull': level_bull['price'],  
-                                #    'level_price_bear': level_bear['price'], 
-                                    'type': 'S',
+                                'type': 'S',
                                    'level_price ': level_bull['price'] + level_bear['price'],
                                    'level_qty': q,
                                    'profit': profit / (q),
@@ -145,8 +95,7 @@ def evaluate_tender_profit(tender, usd, bull, bear, ritc):
             q_left = 0 
             net_profit +=  q_left * p['profit']
 
-        
-
+    
     print("Profit:", net_profit, time.time() - t_start)
 
     # merge the 2 points 
@@ -166,12 +115,6 @@ def step_once():
     bear_bid, bear_ask, bear_bid_depth, bear_ask_depth = best_bid_ask(BEAR)
     ritc_bid_usd, ritc_ask_usd, ritc_bid_depth, ritc_ask_depth = best_bid_ask(RITC)
     usd_bid, usd_ask, _, _ = best_bid_ask(USD)   # USD quoted in CAD (USD/CAD)
-
-
-    bull = best_bid_ask_entire_depth(BULL)
-    bear = best_bid_ask_entire_depth(BEAR)
-    ritc  = best_bid_ask_entire_depth(RITC)
-    usd = best_bid_ask_entire_depth(USD)   
 
     # Convert RITC to CAD using USD book
     ritc_bid_cad = ritc_bid_usd * usd_bid
@@ -193,54 +136,49 @@ def step_once():
     tenders = get_tenders()
     unwinding_active = False  # Flag for later
     for tender in tenders:  # Prioritize by profit? Sort if multiple
+        eval_result = evaluate_tender_profit(tender)
 
-        if tender['tender_id'] in tender_ids_eval:
-            continue
-        
-        tender_ids_eval.add(tender['tender_id'])
-
-        eval_result = evaluate_tender_profit(tender, usd, bull,bear, ritc)
-
-        print(tender)
         print(f"Evaluated profit : {eval_result}")
 
         q_tender = tender['quantity']
         if eval_result['profitable'] :
             if accept_tender(tender):
-                print(f"Accepted tender ID {tender['tender_id']}, profit {eval_result['profit']:.2f}")
+                print(f"Accepted tender ID {tender['tender_id']}, profit {eval_result['profit_cad']:.2f} CAD, method {eval_result['unwind_method']}")
                 unwind_tender_position(tender, eval_result)  # Trigger unwind
                 unwinding_active = True
             else:
                 print(f"Failed to accept tender ID {tender['tender_id']}")
         else:
-            print(f"Rejected tender ID {tender['tender_id']}: Not profitable")
+            print(f"Rejected tender ID {tender['tender_id']}: Not profitable or limits exceeded")
 
-    traded = False
+
+
+    # traded = False
     
-    if not unwinding_active:  # Proceed with arb if not unwinding
-        if edge1 >= ARB_THRESHOLD_CAD and within_limits():
-            # Basket rich: sell BULL & BEAR, buy RITC
-            q = min(ORDER_QTY, MAX_SIZE_EQUITY)
-            place_mkt(BULL, "SELL", q)
-            place_mkt(BEAR, "SELL", q)
-            place_mkt(RITC, "BUY",  q)
-            traded = True
+    # if not unwinding_active:  # Proceed with arb if not unwinding
+    #     if edge1 >= ARB_THRESHOLD_CAD and within_limits():
+    #         # Basket rich: sell BULL & BEAR, buy RITC
+    #         q = min(ORDER_QTY, MAX_SIZE_EQUITY)
+    #         place_mkt(BULL, "SELL", q)
+    #         place_mkt(BEAR, "SELL", q)
+    #         place_mkt(RITC, "BUY",  q)
+    #         traded = True
 
-        elif edge2 >= ARB_THRESHOLD_CAD and within_limits():
-            # ETF rich: buy BULL & BEAR, sell RITC
-            q = min(ORDER_QTY, MAX_SIZE_EQUITY)
-            place_mkt(BULL, "BUY",  q)
-            place_mkt(BEAR, "BUY",  q)
-            place_mkt(RITC, "SELL", q)
-            traded = True
+    #     elif edge2 >= ARB_THRESHOLD_CAD and within_limits():
+    #         # ETF rich: buy BULL & BEAR, sell RITC
+    #         q = min(ORDER_QTY, MAX_SIZE_EQUITY)
+    #         place_mkt(BULL, "BUY",  q)
+    #         place_mkt(BEAR, "BUY",  q)
+    #         place_mkt(RITC, "SELL", q)
+    #         traded = True
 
-    return traded, edge1, edge2, {
-        "bull_bid": bull_bid, "bull_ask": bull_ask,
-        "bear_bid": bear_bid, "bear_ask": bear_ask,
-        "ritc_bid_usd": ritc_bid_usd, "ritc_ask_usd": ritc_ask_usd,
-        "usd_bid": usd_bid, "usd_ask": usd_ask,
-        "ritc_bid_cad": ritc_bid_cad, "ritc_ask_cad": ritc_ask_cad
-    }
+    # return traded, edge1, edge2, {
+    #     "bull_bid": bull_bid, "bull_ask": bull_ask,
+    #     "bear_bid": bear_bid, "bear_ask": bear_ask,
+    #     "ritc_bid_usd": ritc_bid_usd, "ritc_ask_usd": ritc_ask_usd,
+    #     "usd_bid": usd_bid, "usd_ask": usd_ask,
+    #     "ritc_bid_cad": ritc_bid_cad, "ritc_ask_cad": ritc_ask_cad
+    # }
 
 # New unwind function for Step 4
 
@@ -318,6 +256,8 @@ def unwind_tender_position(tender, eval_result):
         unwind_options.sort(key=lambda x: -x['total_cost'])
 
     # Execute orders in ranked order until q_left is zero
+    convert_later = 0  
+
     for opt in unwind_options:
         if q_left <= 0:
             break
@@ -332,14 +272,16 @@ def unwind_tender_position(tender, eval_result):
             if opt['action'] == 'BUY':
                 place_mkt(BULL, 'BUY', qty)
                 place_mkt(BEAR, 'BUY', qty)
-                print(f"Bought {qty} BULL & BEAR, then converted to RITC (manual step)")
+                convert_later += qty
+                # print(f"Bought {qty} BULL & BEAR, then converted to RITC (manual step)")
             else:
-                print(f"Redeemed {qty} RITC, then selling stocks (manual step)")
+                # print(f"Redeemed {qty} RITC, then selling stocks (manual step)")
+                convert_later += qty
                 place_mkt(BULL, 'SELL', qty)
                 place_mkt(BEAR, 'SELL', qty)
         q_left -= qty
 
-
+    
     print("[UPDATE] Conversion step pending for the qty", convert_later)
 
     if opt['action'] == 'BUY' and convert_later > 0:
@@ -350,7 +292,6 @@ def unwind_tender_position(tender, eval_result):
     elif opt['action'] == 'SELL' and convert_later > 0:
         convert_ritc(convert_later)
         print(f"Converted {convert_later} RITC via converter after redeeming RITC")
-
 
     print("Unwind complete")
 
@@ -370,8 +311,10 @@ def main():
     resp = open_leases()
 
     tick, status = get_tick_status()
+
     while status == "ACTIVE":
-        traded, e1, e2, info = step_once()
+        # traded, e1, e2, info = 
+        step_once()
         # Optional: print a lightweight heartbeat every 1s
         # print(f"tick={tick} e1={e1:.4f} e2={e2:.4f} ritc_ask_cad={info['ritc_ask_cad']:.4f}")
         sleep(0.5)
@@ -397,7 +340,7 @@ def test_tender_code():
 if __name__ == "__main__":
     # main()
 
-    main()
+    test_tender_code()
 
 
 

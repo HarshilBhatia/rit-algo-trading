@@ -144,7 +144,7 @@ def step_once():
     s.post(f"{API}/leases", params = {"ticker":"ETF-Creation"})
     s.post(f"{API}/leases", params = {"ticker":"ETF-Redemption"})
 
-    out = convert()
+    # out = convert()
     # print(out.json())
 
 
