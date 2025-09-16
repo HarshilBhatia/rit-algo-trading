@@ -87,6 +87,28 @@ def place_mkt(ticker, action, qty): # type: LMT?
                   params={"ticker": ticker, "type": "MARKET",
                           "quantity": int(qty), "action": action}).ok
 
+
+def convert():
+
+    # print(s.get(f"{API}/leases").json())
+
+    print(positions_map(), "\n\n\n")
+
+    endpoint = f"{API}/leases/{2}"
+
+    # resp = s.post(endpoint, params = {"from1": "BULL", "quantity1":10000, "from2": "BEAR", "quantity2":10000, "USD": 1500})
+    # resp = s.post(endpoint, params = {"from1": "BULL", "quantity1":10000, "from2": "BEAR", "quantity2":10000})
+    # resp = s.post(endpoint, params = {"from1": "RITC", "quantity1": int(10000)})
+    resp2 = s.post(endpoint, params = {"from1": "RITC", "quantity1": int(30000), "from2":"USD", "quantity2": int(4500)})
+    # , "from2": 'BEAR', "quantity2":10000, "USD": 1500})
+
+    print('asldfka', resp2.json())
+    # return s.post(f"{API}/leases", params = {"ticker":"ETF-Creation", 
+    # #'from1': 'BULL', 'quantity1':1000,
+    # #    "from2": 'BEAR', "quantity2":1000
+    # })
+
+
 def within_limits():
     # Simple gross/net guard using equity legs only
     pos = positions_map()
@@ -134,7 +156,20 @@ def step_once():
     # SELL RITC (hit bid in USD), BUY basket (lift asks) -> compare in CAD
     edge2 = ritc_bid_cad - basket_buy_cost
     
-    accept_active_tender_offers() # Automatically checking and acceptting all of the tender offer
+    q = 10000
+    print(place_mkt(BULL, "BUY",  q))
+    print(place_mkt(BEAR, "BUY",  q))
+    
+    s.post(f"{API}/leases", params = {"ticker":"ETF-Creation"})
+    s.post(f"{API}/leases", params = {"ticker":"ETF-Redemption"})
+
+    out = convert()
+    # print(out.json())
+
+
+
+
+    # accept_active_tender_offers() # Automatically checking and acceptting all of the tender offer
 
     traded = False
     
@@ -167,7 +202,7 @@ def main():
     while status == "ACTIVE":
         traded, e1, e2, info = step_once()
         # Optional: print a lightweight heartbeat every 1s
-        print(f"tick={tick} e1={e1:.4f} e2={e2:.4f} ritc_ask_cad={info['ritc_ask_cad']:.4f}")
+        # print(f"tick={tick} e1={e1:.4f} e2={e2:.4f} ritc_ask_cad={info['ritc_ask_cad']:.4f}")
         sleep(0.5)
         tick, status = get_tick_status()
 
