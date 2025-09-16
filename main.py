@@ -317,6 +317,7 @@ def unwind_tender_position(tender, eval_result):
     else:
         unwind_options.sort(key=lambda x: -x['total_cost'])
 
+    convert_later = 0
     # Execute orders in ranked order until q_left is zero
     for opt in unwind_options:
         if q_left <= 0:
@@ -337,6 +338,9 @@ def unwind_tender_position(tender, eval_result):
                 print(f"Redeemed {qty} RITC, then selling stocks (manual step)")
                 place_mkt(BULL, 'SELL', qty)
                 place_mkt(BEAR, 'SELL', qty)
+    
+            convert_later += qty
+
         q_left -= qty
 
 
