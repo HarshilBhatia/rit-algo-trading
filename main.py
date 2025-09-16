@@ -3,11 +3,13 @@ RIT Market Simulator Algorithmic ETF Arbitrage Case - Support File
 Rotman BMO Finance Research and Trading Lab, University of Toronto (C)
 All rights reserved.
 """
-
+import os 
 import requests
 from time import sleep
 import numpy as np
 import pickle 
+from tabulate import tabulate
+import time 
 '''
 If you are not familiar with Python or feeling a little bit rusty, highly recommend you to go through the following link:
     https://github.com/trekhleb/learn-python
@@ -143,73 +145,94 @@ def accept_tender(tender):
         resp = s.post(f"{API}/tenders/{tender_id}", params={"price": price})
     return resp.ok
 
+
+
 # New evaluation function for Step 2
-def evaluate_tender_profit(tender):
+def evaluate_tender_profit(tender, usd, bull, bear, ritc):
 
     # TODO: The idea here will be -- evaulate cost (ETF) / individual + conv per bid / ask. 
     # Then rank them -- and calculate the expected payout till we reach the quantity. 
 
     # TODO: Think how you'll unwind this position. 
 
+
+    t_start = time.time()
     action = tender['action']  # 'SELL' (you sell) or 'BUY' (you buy)
     p_tender = tender['price']  # USD
     q_tender = tender['quantity']
 
-    timestamp = datetime.datetime.now().isoformat()
+    ritc_asks , ritc_bids = ritc['asks'], ritc['bids']
+    profits = [] 
+
+    # i want to compute the direct profit at each bid and ask level. 
+
+    if action == 'SELL':  # You sell RITC, go short
+        for level in ritc_asks:
+            profit = level['quantity'] * (p_tender - level['price'])
+            profits.append({'type': 'E', 'level_price': level['price'], 'level_qty': level['quantity'], 'profit': profit / level['quantity'],'profit_with_q': profit})
+    elif action == 'BUY':  # You buy RITC, go long, need to sell at bid levels
+        for level in ritc_bids:
+            profit = level['quantity'] * (level['price'] - p_tender)
+            profits.append({'type': 'E', 'level_price': level['price'], 'level_qty': level['quantity'],  'profit': profit / level['quantity'], 'profit_with_q': profit})
 
 
-    usd = best_bid_ask_entire_depth(USD)
-    bull = best_bid_ask_entire_depth(BULL)
-    bear = best_bid_ask_entire_depth(BEAR)
-    ritc = best_bid_ask_entire_depth(RITC)
+    profits_stocks = [] 
+    bull_asks , bull_bids = bull['asks'], bull['bids']
+    bear_asks , bear_bids = bear['asks'], bear['bids']
+
+    if action == 'SELL':
+        for level_bull, level_bear in zip(bull_asks, bear_asks):
+            q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
+            profit = q* (p_tender - (level_bull['price'] + level_bear['price'])) - CONVERTER_COST * q / 10000 # this should be per 10000.
+            # profits_stocks.append({'level_price_bull': level_bull['price'], 'level_qty_bull': level_bull['quantity'], 
+            #                        'level_price_bear': level_bear['price'], 'level_qty_bear': level_bear['quantity'],
+            #                        'profit': profit})
+            profits.append({'type': 'S',
+                                   'level_price ': level_bull['price'] + level_bear['price'],
+                                   'level_qty': q,
+                                   'profit': profit / (q),
+                                   'profit_with_q': profit})
+            
+    elif action == 'BUY':
+        for level_bull, level_bear in zip(bull_bids, bear_bids):
+            q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
+            profit = q* ((level_bull['price'] + level_bear['price'])  - p_tender) - CONVERTER_COST # this should be per 10000.
+            profits.append({
+                # 'level_price_bull': level_bull['price'],  
+                                #    'level_price_bear': level_bear['price'], 
+                                    'type': 'S',
+                                   'level_price ': level_bull['price'] + level_bear['price'],
+                                   'level_qty': q,
+                                   'profit': profit / (q),
+                                   'profit_with_q': profit})
 
 
-    data = {
-        'timestamp': timestamp,
-        'tender': tender,
-        'usd': usd,
-        'bull': bull,
-        'bear': bear,
-        'ritc': ritc
-        }
-    
-    # Generate filename with timestamp
-    filename = f"output/market_data_{timestamp.replace(':', '-')}.pkl"
-    
-    # Dump data to pickle file
-    with open(filename, 'wb') as f:
-        pickle.dump(data, f)
+    # print("Profits at each level via stocks, with the adjusted conversion cost")
 
+    profits.sort(key=lambda x: x['profit'], reverse=True)
 
-    # print('lalalala', best_bid_ask(RITC))
+    net_profit = 0 
+    q_left = q_tender 
+    for p in profits:
+        if q_left >= p['level_qty']:
+            q_left -= p['level_qty']
+            net_profit += p['level_qty'] * p['profit']
+        else:
+            q_left = 0 
+            net_profit +=  q_left * p['profit']
 
-    
-    # if action == 'SELL':  # You sell RITC, go short
-    #     direct_profit = q_tender*(p_tender - ritc_ask_usd)
-    # elif action == 'BUY':  # You buy RITC, go long
-    #     direct_profit = q_tender*( ritc_bid_usd - p_tender)
-       
-    
-    direct_profit = 0 
-    max_profit = direct_profit
-    # print(profit_direct, profit_converter)
-    unwind_method = 'direct'
-    unwind_cost = direct_profit
-    
-    # Liquidity adjustment
-    # relevant_depth = ask_depth if action == 'SELL' else bid_depth
-    # if unwind_method == 'direct' and relevant_depth < LIQUIDITY_THRESHOLD:
-    #     unwind_method = 'converter'
-    #     max_profit = profit_converter  # Reassign
-    
+        
+
+    print("Profit:", net_profit, time.time() - t_start)
+
+    # merge the 2 points 
+
     # threshold = q_tender * p_tender * usd_bid * PROFIT_THRESHOLD_PCT
-    profitable = max_profit > 0
-    
+    profitable = net_profit > 0
+
     return {
         'profitable': profitable,
-        'profit_cad': max_profit,
-        'unwind_method': unwind_method,
-        'unwind_cost_cad': unwind_cost
+        'profit': net_profit,
     }
 
 # --------- CORE LOGIC ----------
@@ -245,7 +268,6 @@ def step_once():
         print(f"Evaluated profit : {eval_result}")
 
         q_tender = tender['quantity']
-        ritc_change = -q_tender if tender['action'] == 'SELL' else q_tender  # Short for sell, long for buy
         if eval_result['profitable'] :
             if accept_tender(tender):
                 print(f"Accepted tender ID {tender['tender_id']}, profit {eval_result['profit_cad']:.2f} CAD, method {eval_result['unwind_method']}")
@@ -284,64 +306,102 @@ def step_once():
     }
 
 # New unwind function for Step 4
+
 def unwind_tender_position(tender, eval_result):
     action = tender['action']
-    q_tender = tender['quantity']
-    method = eval_result['unwind_method']
-    pos = positions_map()
-    target_pos = 0  # Aim to flatten RITC
-    remaining = abs(pos[RITC])  # Assume post-accept pos is +/- q_tender
-    
-    exposure_usd = q_tender * tender['price'] if action == 'SELL' else -q_tender * tender['price']
-    hedge_fx(exposure_usd)  # Hedge immediately
-    
-    while remaining > 0:
-        pos = positions_map()
-        remaining = abs(pos[RITC])
-        if remaining == 0:
+    q_left = tender['quantity']
+
+    # Get fresh books
+    ritc_book = best_bid_ask_entire_depth(RITC)
+    bull_book = best_bid_ask_entire_depth(BULL)
+    bear_book = best_bid_ask_entire_depth(BEAR)
+
+    unwind_options = []
+
+    # ETF unwind (direct)
+    if action == 'SELL':  # You need to buy back RITC to close short
+        for level in ritc_book['asks']:
+            unwind_options.append({
+                'type': 'ETF',
+                'price': level['price'],
+                'qty': level['quantity'],
+                'action': 'BUY',
+                'total_cost': level['price'] * level['quantity']
+            })
+    else:  # action == 'BUY', you need to sell RITC to close long
+        for level in ritc_book['bids']:
+            unwind_options.append({
+                'type': 'ETF',
+                'price': level['price'],
+                'qty': level['quantity'],
+                'action': 'SELL',
+                'total_cost': -level['price'] * level['quantity']
+            })
+
+    # Stocks + converter unwind
+    if action == 'SELL':
+        # Need to buy BULL and BEAR, then convert to RITC
+        bull_asks = bull_book['asks']
+        bear_asks = bear_book['asks']
+        for bull_level, bear_level in zip(bull_asks, bear_asks):
+            qty = min(bull_level['quantity'], bear_level['quantity'], CONVERTER_BATCH)
+            if qty <= 0:
+                continue
+            total_price = bull_level['price'] + bear_level['price']
+            total_cost = qty * total_price + CONVERTER_COST * (qty / CONVERTER_BATCH)
+            unwind_options.append({
+                'type': 'CONVERT',
+                'price': total_price,
+                'qty': qty,
+                'action': 'BUY',
+                'total_cost': total_cost
+            })
+    else:
+        # Need to sell BULL and BEAR, after redeeming RITC
+        bull_bids = bull_book['bids']
+        bear_bids = bear_book['bids']
+        for bull_level, bear_level in zip(bull_bids, bear_bids):
+            qty = min(bull_level['quantity'], bear_level['quantity'], CONVERTER_BATCH)
+            if qty <= 0:
+                continue
+            total_price = bull_level['price'] + bear_level['price']
+            total_cost = -qty * total_price + CONVERTER_COST * (qty / CONVERTER_BATCH)
+            unwind_options.append({
+                'type': 'CONVERT',
+                'price': total_price,
+                'qty': qty,
+                'action': 'SELL',
+                'total_cost': total_cost
+            })
+
+    # Sort by best (lowest) total_cost for BUY, highest for SELL
+    if action == 'SELL':
+        unwind_options.sort(key=lambda x: x['total_cost'])
+    else:
+        unwind_options.sort(key=lambda x: -x['total_cost'])
+
+    # Execute orders in ranked order until q_left is zero
+    for opt in unwind_options:
+        if q_left <= 0:
             break
-        
-        # Re-assess liquidity
-        _, _, ritc_bid_depth, ritc_ask_depth = best_bid_ask(RITC)
-        relevant_depth = ritc_ask_depth if action == 'SELL' else ritc_bid_depth  # Buy to cover short, sell to unwind long
-        if method == 'direct' and relevant_depth >= LIQUIDITY_THRESHOLD:
-            action = "BUY" if action == 'SELL' else "SELL"
-            child_qty = min(ORDER_QTY, remaining, relevant_depth)
-            if place_mkt(RITC, action, child_qty):
-                print(f"Unwound {child_qty} RITC via direct {action}")
-            else:
-                print("Direct order failed; switching to converter")
-                method = 'converter'
+        qty = min(opt['qty'], q_left, MAX_SIZE_EQUITY)
+        if qty <= 0:
+            continue
+        if opt['type'] == 'ETF':
+            place_mkt(RITC, opt['action'], qty)
+            print(f"Unwound {qty} RITC via ETF {opt['action']} at {opt['price']}")
         else:
-            # Use converter
-            batches_left = remaining // CONVERTER_BATCH
-            if batches_left > 0:
-                if action == 'SELL':  # Create RITC: Buy stocks, convert
-                    # Assume manual converter; print alert
-                    print(f"Manual: Buy {CONVERTER_BATCH} BULL and BEAR, then use ETF-Creation for {batches_left} batches")
-                    # Simulate buys (in real, slice)
-                    for stock in [BULL, BEAR]:
-                        stock_ask_depth = get_order_book_depth(stock)[1]  # ask depth
-                        child_qty = min(ORDER_QTY, CONVERTER_BATCH, stock_ask_depth)
-                        while child_qty > 0:
-                            place_mkt(stock, "BUY", child_qty)
-                            child_qty -= child_qty  # Loop if needed, but simplify
-                else:  # Buy tender: Redeem RITC, sell stocks
-                    print(f"Manual: Use ETF-Redemption for {batches_left} batches, then sell {CONVERTER_BATCH} BULL and BEAR")
-                    for stock in [BULL, BEAR]:
-                        stock_bid_depth = get_order_book_depth(stock)[0]  # bid depth
-                        child_qty = min(ORDER_QTY, CONVERTER_BATCH, stock_bid_depth)
-                        while child_qty > 0:
-                            place_mkt(stock, "SELL", child_qty)
-                            child_qty -= child_qty
-            remaining -= batches_left * CONVERTER_BATCH
-            if remaining > 0:
-                # Remainder direct
-                action = "BUY" if action == 'SELL' else "SELL"
-                place_mkt(RITC, action, remaining)
-        
-        sleep(0.2)  # Poll delay
-    
+            # Stocks + converter
+            if opt['action'] == 'BUY':
+                place_mkt(BULL, 'BUY', qty)
+                place_mkt(BEAR, 'BUY', qty)
+                print(f"Bought {qty} BULL & BEAR, then converted to RITC (manual step)")
+            else:
+                print(f"Redeemed {qty} RITC, then selling stocks (manual step)")
+                place_mkt(BULL, 'SELL', qty)
+                place_mkt(BEAR, 'SELL', qty)
+        q_left -= qty
+
     print("Unwind complete")
 
 # New FX hedge function
@@ -365,5 +425,40 @@ def main():
         sleep(0.5)
         tick, status = get_tick_status()
 
+
+def test_tender_code():
+    
+
+    # Iterate through all files in the directory
+    for root, _, files in os.walk('output/'):
+        for file in files:
+            # Check if the file has a .pkl or .pickle extension
+            if file.endswith(('.pkl', '.pickle')):
+                file_path = os.path.join(root, file)
+                with open(file_path, 'rb') as f:
+                    data = pickle.load(f)
+                    evaluate_tender_profit(data['tender'], data['usd'], data['bull'], data['bear'], data['ritc'])
+                    
+
+    
+
 if __name__ == "__main__":
-    main()
+    # main()
+
+    test_tender_code()
+
+
+
+"""
+
+25.62
+
+
+bid start 25.74 25.68
+
+
+
+9.86 9.77
+16.18 16.13
+
+"""
