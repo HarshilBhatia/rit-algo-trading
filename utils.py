@@ -148,7 +148,7 @@ def convert_ritc(qty_ritc):
     if not resp.ok:
         print(f"[ERROR] Failed to open ETF-Creation lease: {resp.status_code} {resp.text}")
     
-    print("Example", resp)
+    print("lalala", resp)
 
     return resp
 
@@ -159,6 +159,7 @@ def convert_bull_bear(qty):
     if not resp.ok:
         print(f"[ERROR] Failed to open ETF-Redemption lease: {resp.status_code} {resp.text}")
     
+    print("ppppp", resp)
     return resp
 
 

@@ -10,7 +10,7 @@ import numpy as np
 import pickle 
 from tabulate import tabulate
 import time 
-import tenders
+import tender
 from utils import *
 '''
 If you are not familiar with Python or feeling a little bit rusty, highly recommend you to go through the following link:
@@ -49,7 +49,7 @@ MAX_SIZE_FX = 2500000  # per order for CAD/USD
 MAX_LONG_NET  = 25000
 MAX_SHORT_NET = -25000
 MAX_GROSS     = 500000
-ORDER_QTY     = 5000    # child order size for arb legs
+ORDER_QTY     = 10000    # child order size for arb legs
 
 # Cushion to beat fees & slippage.
 # 3 legs with market orders => ~0.06 CAD/sh cost; add a bit more for safety.
@@ -113,7 +113,7 @@ def step_once():
         
         tender_ids_eval.add(tender['tender_id'])
 
-        eval_result = tenders.evaluate_tender_profit(tender, usd, bull,bear, ritc)
+        eval_result = tender.evaluate_tender_profit(tender, usd, bull,bear, ritc)
 
         print(tender)
         print(f"Evaluated profit : {eval_result}")
@@ -122,7 +122,7 @@ def step_once():
         if eval_result['profitable'] :
             if accept_tender(tender):
                 print(f"Accepted tender ID {tender['tender_id']}, profit {eval_result['profit']:.2f}")
-                tenders.unwind_tender_position(tender, eval_result)  # Trigger unwind
+                tender.unwind_tender_position(tender, eval_result)  # Trigger unwind
                 unwinding_active = True
             else:
                 print(f"Failed to accept tender ID {tender['tender_id']}")
@@ -185,36 +185,48 @@ def check_conversion_arbitrage():
     q = ORDER_QTY
 
     # Direction 1: Convert basket to ETF (buy basket, convert, sell ETF)
-    basket_cost = basket_to_etf_value(bull_ask, bear_ask, q)
-    etf_proceeds = ritc_bid_usd * q
-    profit1 = etf_proceeds - basket_cost
+    basket_cost = basket_to_etf_value(bull_ask, bear_ask, q) #  bought 
+    etf_proceeds = ritc_bid_usd * q #
+    profit1 = etf_proceeds - basket_cost # USD 
+    # need to hedge FX
 
     # Direction 2: Convert ETF to basket (buy ETF, convert, sell basket)
-    etf_cost = etf_to_basket_value(ritc_ask_usd, q)
+    etf_cost = etf_to_basket_value(ritc_ask_usd, q) # 
     basket_proceeds = (bull_bid + bear_bid) * q
-    profit2 = basket_proceeds - etf_cost
+    profit2 = basket_proceeds - etf_cost  # CAD
+    # need to hedge FD
 
-    print(f"Basket→ETF profit: {profit1:.2f} CAD for {q} shares")
-    print(f"ETF→Basket profit: {profit2:.2f} CAD for {q} shares")
-
+    
     # Place trades if profitable
-    if profit1 > 0 and within_limits():
+    if profit1 > 2000 and within_limits():
         # Buy basket, convert, sell ETF
+        print(f"Basket→ETF profit: {profit1:.2f} for {q} shares")
+
         place_mkt(BULL, "BUY", q)
         place_mkt(BEAR, "BUY", q)
         # Conversion simulated here; in real system, call conversion API
-        convert_bull_bear(q)
+        # print(out.json())
         place_mkt(RITC, "SELL", q)
-        print("[ARBITRAGE] Basket -> ETF")
+        out = convert_bull_bear(q)
 
-    elif profit2 > 0 and within_limits():
+        print("[ARBITRAGE] Basket -> ETF")
+        # exit()
+
+
+    elif profit2 > 2000 and within_limits():
         # Buy ETF, convert, sell basket
+        print(f"ETF→Basket profit: {profit2:.2f} CAD for {q} shares")
+
         place_mkt(RITC, "BUY", q)
         # Conversion simulated here; in real system, call conversion API
-        convert_ritc(q)
+        print(out.json())
         place_mkt(BULL, "SELL", q)
         place_mkt(BEAR, "SELL", q)
+
+        out = convert_ritc(q)
+
         print("[ARBITRAGE] ETF -> Basket")
+        # exit()
 
 # Example usage in main loop:
 def main():
@@ -255,7 +267,11 @@ if __name__ == "__main__":
 
 
 bid start 25.74 25.68
+I want you to implement the following--
 
+whenever im buying the bull / bear or RITC then converting and then selling, there is FX risk because bull / bear are in CAD while RITC is in USD.
+
+So i need you to hedge the currently whenever we buy / sell because the conversion takes 1-2s to execute.
 
 
 9.86 9.77
