@@ -149,7 +149,7 @@ def convert_ritc(qty_ritc):
         print(f"[ERROR] Failed to open ETF-Creation lease: {resp.status_code} {resp.text}")
     
     print("Example", resp)
-    
+
     return resp
 
 def convert_bull_bear(qty):
@@ -160,3 +160,16 @@ def convert_bull_bear(qty):
         print(f"[ERROR] Failed to open ETF-Redemption lease: {resp.status_code} {resp.text}")
     
     return resp
+
+
+def conversion_cost(q):
+    """Returns the conversion fee for q shares."""
+    return 1500 * q / 10000
+
+def basket_to_etf_value(bull_price, bear_price, q):
+    """Total cost to convert basket to ETF for q shares."""
+    return (bull_price + bear_price) * q + conversion_cost(q)
+
+def etf_to_basket_value(etf_price, q):
+    """Total cost to convert ETF to basket for q shares."""
+    return etf_price * q + conversion_cost(q)
