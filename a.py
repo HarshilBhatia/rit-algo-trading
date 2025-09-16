@@ -88,25 +88,6 @@ def place_mkt(ticker, action, qty): # type: LMT?
                           "quantity": int(qty), "action": action}).ok
 
 
-def convert():
-
-    # print(s.get(f"{API}/leases").json())
-
-    print(positions_map(), "\n\n\n")
-
-    endpoint = f"{API}/leases/{2}"
-
-    # resp = s.post(endpoint, params = {"from1": "BULL", "quantity1":10000, "from2": "BEAR", "quantity2":10000, "USD": 1500})
-    # resp = s.post(endpoint, params = {"from1": "BULL", "quantity1":10000, "from2": "BEAR", "quantity2":10000})
-    # resp = s.post(endpoint, params = {"from1": "RITC", "quantity1": int(10000)})
-    resp2 = s.post(endpoint, params = {"from1": "RITC", "quantity1": int(30000), "from2":"USD", "quantity2": int(4500)})
-    # , "from2": 'BEAR', "quantity2":10000, "USD": 1500})
-
-    print('asldfka', resp2.json())
-    # return s.post(f"{API}/leases", params = {"ticker":"ETF-Creation", 
-    # #'from1': 'BULL', 'quantity1':1000,
-    # #    "from2": 'BEAR', "quantity2":1000
-    # })
 
 
 def within_limits():
