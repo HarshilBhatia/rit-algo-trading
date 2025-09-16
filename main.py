@@ -199,34 +199,34 @@ def check_conversion_arbitrage():
     
     # Place trades if profitable
     if profit1 > 2000 and within_limits():
-        # Buy basket, convert, sell ETF
         print(f"Basket→ETF profit: {profit1:.2f} for {q} shares")
-
         place_mkt(BULL, "BUY", q)
         place_mkt(BEAR, "BUY", q)
-        # Conversion simulated here; in real system, call conversion API
-        # print(out.json())
         place_mkt(RITC, "SELL", q)
+        # Hedge FX: you are now short USD (from selling RITC)
+        hedge_fx(-q * ritc_bid_usd)
         out = convert_bull_bear(q)
-
+        print(out.json())
+        # Unhedge after conversion completes
+        hedge_fx(q * ritc_bid_usd)
         print("[ARBITRAGE] Basket -> ETF")
-        # exit()
-
+        exit()
 
     elif profit2 > 2000 and within_limits():
-        # Buy ETF, convert, sell basket
         print(f"ETF→Basket profit: {profit2:.2f} CAD for {q} shares")
-
         place_mkt(RITC, "BUY", q)
-        # Conversion simulated here; in real system, call conversion API
+        # Hedge FX: you are now long USD (from buying RITC)
+        hedge_fx(q * ritc_ask_usd)
+        out = convert_ritc(q)
         print(out.json())
+
         place_mkt(BULL, "SELL", q)
         place_mkt(BEAR, "SELL", q)
 
-        out = convert_ritc(q)
-
+        # Unhedge after conversion completes
+        hedge_fx(-q * ritc_ask_usd)
         print("[ARBITRAGE] ETF -> Basket")
-        # exit()
+        exit()
 
 # Example usage in main loop:
 def main():
@@ -267,11 +267,6 @@ if __name__ == "__main__":
 
 
 bid start 25.74 25.68
-I want you to implement the following--
-
-whenever im buying the bull / bear or RITC then converting and then selling, there is FX risk because bull / bear are in CAD while RITC is in USD.
-
-So i need you to hedge the currently whenever we buy / sell because the conversion takes 1-2s to execute.
 
 
 9.86 9.77
