@@ -112,9 +112,12 @@ def get_position_limits_impact(projected_ritc_change=0, projected_bull_change=0,
 
 def place_mkt(ticker, action, qty):
     # Sends Market orders
-    return s.post(f"{API}/orders",
+    order  =  s.post(f"{API}/orders",
                   params={"ticker": ticker, "type": "MARKET",
-                          "quantity": int(qty), "action": action}).ok
+                          "quantity": int(qty), "action": action})
+
+    print(order.json())
+    return order.json()
 
 def within_limits():
     return get_position_limits_impact()
@@ -143,23 +146,20 @@ def open_leases():
 
 def convert_ritc(qty_ritc):
 
-    endpoint = f"{API}/leases/{2}"
+    endpoint = f"{API}/leases/{4}"
     resp = s.post(endpoint, params = {"from1": "RITC", "quantity1": int(qty_ritc), "from2":"USD", "quantity2": int(1500*qty_ritc // 10000)})
     if not resp.ok:
         print(f"[ERROR] Failed to open ETF-Creation lease: {resp.status_code} {resp.text}")
-    
-    print("lalala", resp)
 
     return resp
 
 def convert_bull_bear(qty):
 
-    endpoint = f"{API}/leases/{1}"
+    endpoint = f"{API}/leases/{3}"
     resp = s.post(endpoint, params = {"from1": "BULL", "quantity1": int(qty), "from2":"BEAR", "quantity2": int(qty), "from3":"USD", "quantity3": int(1500*qty // 10000)})
     if not resp.ok:
         print(f"[ERROR] Failed to open ETF-Redemption lease: {resp.status_code} {resp.text}")
     
-    print("ppppp", resp)
     return resp
 
 
@@ -174,3 +174,7 @@ def basket_to_etf_value(bull_price, bear_price, q):
 def etf_to_basket_value(etf_price, q):
     """Total cost to convert ETF to basket for q shares."""
     return etf_price * q + conversion_cost(q)
+
+
+def get_leases():
+    return s.get(f"{API}/leases")

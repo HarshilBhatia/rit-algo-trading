@@ -169,7 +169,8 @@ def hedge_fx(exposure_usd):
     qty = abs(exposure_usd)  # Adjust units if needed (API may require integers)
     child_qty = min(MAX_SIZE_FX, qty)
     while qty > 0:
-        place_mkt(USD, action, child_qty)
+        out = place_mkt(USD, action, child_qty)
+        print(out)
         qty -= child_qty
     print(f"Hedged FX: {action} {abs(exposure_usd)} USD")
 
@@ -182,56 +183,65 @@ def check_conversion_arbitrage():
 
     # Convert ETF prices to CAD
 
+    # place_mkt(BEAR, "SELL", 10000)['vwap']
+    # # place_mkt("USD", "BUY", 10000)
+    # # place_mkt("USD", "SELL", 10000)
+    # exit()
+
     q = ORDER_QTY
 
     # Direction 1: Convert basket to ETF (buy basket, convert, sell ETF)
     basket_cost = basket_to_etf_value(bull_ask, bear_ask, q) #  bought 
     etf_proceeds = ritc_bid_usd * q #
     profit1 = etf_proceeds - basket_cost # USD 
-    # need to hedge FX
 
     # Direction 2: Convert ETF to basket (buy ETF, convert, sell basket)
     etf_cost = etf_to_basket_value(ritc_ask_usd, q) # 
     basket_proceeds = (bull_bid + bear_bid) * q
     profit2 = basket_proceeds - etf_cost  # CAD
-    # need to hedge FD
 
     
     # Place trades if profitable
     if profit1 > 2000 and within_limits():
-        print(f"Basket→ETF profit: {profit1:.2f} for {q} shares")
-        place_mkt(BULL, "BUY", q)
-        place_mkt(BEAR, "BUY", q)
-        place_mkt(RITC, "SELL", q)
-        # Hedge FX: you are now short USD (from selling RITC)
-        hedge_fx(-q * ritc_bid_usd)
+        # print(f"Basket→ETF profit: {profit1:.2f} for {q} shares")
+        br = place_mkt(BULL, "BUY", q)['vwap']
+        bl = place_mkt(BEAR, "BUY", q)['vwap']
+
+        
+        r1 = place_mkt(RITC, "SELL", q)['vwap']
+        # BUY USD Back
+        print(f"[FX] Selling USD {q*r1}")
+        usd = place_mkt("USD", "SELL", r1*q)['vwap']
+        print(f"Sold it as {usd}")
+        print('profit', q*(r1*usd_ask - bl - br) - 1500*usd_bid , 'CAD') #w/o fx charges
+ 
         out = convert_bull_bear(q)
-        print(out.json())
-        # Unhedge after conversion completes
-        hedge_fx(q * ritc_bid_usd)
+
         print("[ARBITRAGE] Basket -> ETF")
-        exit()
+        
 
     elif profit2 > 2000 and within_limits():
         print(f"ETF→Basket profit: {profit2:.2f} CAD for {q} shares")
-        place_mkt(RITC, "BUY", q)
-        # Hedge FX: you are now long USD (from buying RITC)
-        hedge_fx(q * ritc_ask_usd)
+        r1 = place_mkt(RITC, "BUY", q)['vwap']
+        print(f"[FX] Buying USD {q*r1}")
+        usd = place_mkt("USD", "BUY", r1*q)['vwap']
+        print(f"Got it at {usd}") # w/o fx charges.
+        
+        
+        bl = place_mkt(BULL, "SELL", q)['vwap']
+        br = place_mkt(BEAR, "SELL", q)['vwap']
+
         out = convert_ritc(q)
-        print(out.json())
-
-        place_mkt(BULL, "SELL", q)
-        place_mkt(BEAR, "SELL", q)
-
-        # Unhedge after conversion completes
-        hedge_fx(-q * ritc_ask_usd)
+        
         print("[ARBITRAGE] ETF -> Basket")
-        exit()
 
 # Example usage in main loop:
 def main():
     resp = open_leases()
     tick, status = get_tick_status()
+
+    resp = get_leases()
+    print(resp.json())
     while status == "ACTIVE":
         check_conversion_arbitrage()
         sleep(0.5)
