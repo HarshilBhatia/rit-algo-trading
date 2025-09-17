@@ -144,23 +144,6 @@ def open_leases():
 
     print("[SUCCESS] Leases opened")
 
-def convert_ritc(qty_ritc):
-
-    endpoint = f"{API}/leases/{4}"
-    resp = s.post(endpoint, params = {"from1": "RITC", "quantity1": int(qty_ritc), "from2":"USD", "quantity2": int(1500*qty_ritc // 10000)})
-    if not resp.ok:
-        print(f"[ERROR] Failed to open ETF-Creation lease: {resp.status_code} {resp.text}")
-
-    return resp
-
-def convert_bull_bear(qty):
-
-    endpoint = f"{API}/leases/{3}"
-    resp = s.post(endpoint, params = {"from1": "BULL", "quantity1": int(qty), "from2":"BEAR", "quantity2": int(qty), "from3":"USD", "quantity3": int(1500*qty // 10000)})
-    if not resp.ok:
-        print(f"[ERROR] Failed to open ETF-Redemption lease: {resp.status_code} {resp.text}")
-    
-    return resp
 
 
 def conversion_cost(q):
@@ -178,3 +161,51 @@ def etf_to_basket_value(etf_price, q):
 
 def get_leases():
     return s.get(f"{API}/leases")
+
+
+
+class Converter():
+
+    def __init__(self):
+        self.creation_id = None
+        self.redemption_id = None
+        self.initialize_leases()
+    
+    def init_paths(self, leases):
+        for lease in leases.json():
+            if lease['ticker'] == 'ETF-Creation':
+                self.creation_id = lease['id']
+            elif lease['ticker'] == 'ETF-Redemption':
+                self.redemption_id = lease['id']  
+
+
+    def initialize_leases(self):
+        leases = get_leases()
+
+        if len(leases.json()) == 0:
+            open_leases()
+            sleep(2)  # Give some time for the leases to be established
+        
+        leases = get_leases()
+        self.init_paths(leases)
+
+        print("Current leases:", leases.json())
+
+        
+    def convert_ritc(self,qty_ritc):
+
+        endpoint = f"{API}/leases/{self.redemption_id}"
+        resp = s.post(endpoint, params = {"from1": "RITC", "quantity1": int(qty_ritc), "from2":"USD", "quantity2": int(1500*qty_ritc // 10000)})
+        if not resp.ok:
+            print(f"[ERROR] Failed to open ETF-Creation lease: {resp.status_code} {resp.text}")
+
+        return resp
+
+    def convert_bull_bear(self, qty):
+
+        endpoint = f"{API}/leases/{self.creation_id}"
+        resp = s.post(endpoint, params = {"from1": "BULL", "quantity1": int(qty), "from2":"BEAR", "quantity2": int(qty), "from3":"USD", "quantity3": int(1500*qty // 10000)})
+        if not resp.ok:
+            print(f"[ERROR] Failed to open ETF-Redemption lease: {resp.status_code} {resp.text}")
+        
+        return resp 
