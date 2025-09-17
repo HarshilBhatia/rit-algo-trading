@@ -5,9 +5,9 @@ import numpy as np
 import pickle 
 from tabulate import tabulate
 import time 
+from rich import print 
 
-
-API = "http://localhost:9990/v1"
+API = "http://localhost:9999/v1"
 
 API_KEY = "PA83Q8EP"                     # <-- your key
 HDRS = {"X-API-key": API_KEY}          # change to X-API-Key if your server needs it
@@ -118,6 +118,11 @@ def place_mkt(ticker, action, qty):
                           "quantity": int(qty), "action": action})
 
     # print(order.json())
+
+    
+    if not order.ok:
+        print(f"[red] [ERROR] couldn't place order: {ticker} {action} {qty} \n {order.text}")
+
     return order.json()
 
 def within_limits():
@@ -216,7 +221,7 @@ class Converter():
         endpoint = f"{API}/leases/{self.redemption_id}"
         resp = s.post(endpoint, params = {"from1": "RITC", "quantity1": int(qty_ritc), "from2":"USD", "quantity2": int(1500*qty_ritc // 10000)})
         if not resp.ok:
-            print(f"[ERROR] Failed to use ETF-Creation lease: {resp.status_code} {resp.text}")
+            print(f"[RETRY]", end = ' ')
             if itr < 10: 
                 sleep(1.5)
                 self.convert_ritc(qty_ritc, itr + 1)
@@ -229,8 +234,9 @@ class Converter():
         endpoint = f"{API}/leases/{self.creation_id}"
         resp = s.post(endpoint, params = {"from1": "BULL", "quantity1": int(qty), "from2":"BEAR", "quantity2": int(qty), "from3":"USD", "quantity3": int(1500*qty // 10000)})
         if not resp.ok:
-            print(f"[ERROR] Failed to use ETF-Redemption lease: {resp.status_code} {resp.text}")
+            print(f"[RETRY]", end = ' ')
             if itr < 10: 
                 sleep(1.5)
-                self.convert_bull_bear(qty, itr + 1)
+                resp = self.convert_bull_bear(qty, itr + 1)
+
         return resp 
