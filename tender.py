@@ -51,7 +51,7 @@ class EvaluateTenders():
         if self.action == 'SELL':
             for level_bull, level_bear in zip(bull_asks, bear_asks):
                 q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
-                profit = q* (self.price - (level_bull['price'] + level_bear['price'])) - CONVERTER_COST * q / 10000 # this should be per 10000.
+                profit = q* (self.price - (level_bull['price'] + level_bear['price'])) - conversion_cost(q) # this should be per 10000.
                 self.positions.append({'type': 'STOCK',
                                     'level_price ': level_bull['price'] + level_bear['price'],
                                     'level_qty': q,
@@ -62,7 +62,7 @@ class EvaluateTenders():
             for level_bull, level_bear in zip(bull_bids, bear_bids):
                 q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
                 # this profit is wrong, doesn't account for usd / cad conversion.
-                profit = q* ((level_bull['price'] + level_bear['price'])  - self.price) - CONVERTER_COST # this should be per 10000.
+                profit = q* ((level_bull['price'] + level_bear['price'])  - self.price) - conversion_cost(q) # this should be per 10000.
                 self.positions.append({
                                     'type': 'STOCK',
                                     'level_price ': level_bull['price'] + level_bear['price'],
@@ -97,7 +97,7 @@ class EvaluateTenders():
         # print(tabulate(self.positions))
 
         print('vanilla profit:', net_profit)
-        net_profit -= 0.02*self.quantity + conversion_cost(self.stock_pos)
+        net_profit -= 0.02*self.etf_pos  + 0.02 * 2 * self.stock_pos# 
         print("Profit:", net_profit, 'etf pos:', self.etf_pos, 'stock pos', self.stock_pos)
 
         profitable = net_profit > 0
@@ -165,7 +165,11 @@ class EvaluateTenders():
 
         # convert_later = 0
         conv_unwind_qtf = self.stock_pos
-        # # Execute orders in ranked order until q_left is zero
+
+        # IDEA -- FOR converter -- we don't need to instantly CONVERT right. We can WAIT
+        # since all the USD is already hegded. Wait for what? -- wait for the random walk price
+        # to make sense. Can also use this instead of current conversion pnl metric to determine 
+        # if BEAR / BULL are undervalued or overvalued. 
         
         while conv_unwind_qtf > 0:
             qty = min(MAX_SIZE_EQUITY, conv_unwind_qtf)
@@ -173,17 +177,29 @@ class EvaluateTenders():
             if self.action == 'SELL':
                 place_mkt(BULL, 'BUY', qty)
                 place_mkt(BEAR, 'BUY', qty)
-                self.converter.convert_bull_bear(qty) # Convert BULL and BEAR to RITC
-
-                place_mkt(USD, 'BUY', conversion_cost(qty))  # Hedge conversion cost
-                print(f"Bought {qty} BULL & BEAR, then converted to RITC (manual step)")
+                place_mkt(USD, 'BUY', 2*qty*0.02)  # transaction cost.
+                print(f"Bought {qty} BULL & BEAR")
             else:
-                print(f"Redeemed {qty} RITC, then selling stocks (manual step)")
+                print(f"Redeemed {qty} RITC, then selling stocks")
                 place_mkt(BULL, 'SELL', qty)
                 place_mkt(BEAR, 'SELL', qty)
 
-                place_mkt(USD, 'BUY', conversion_cost(qty))  # Hedge conversion cost
+                place_mkt(USD, 'BUY', 2*qty*0.02)  # transaction cost.
+            
+            conv_unwind_qtf -= qty
+
+        conv_unwind_qtf = self.stock_pos
+        while conv_unwind_qtf > 0:
+            qty = min(MAX_SIZE_EQUITY, conv_unwind_qtf)
+
+            if self.action == 'SELL':
+                self.converter.convert_bull_bear(qty) # Convert BULL and BEAR to RITC
+                place_mkt(USD, 'BUY',conversion_cost(qty))  # Hedge conversion cost
+                print(f"[Converted] BB -> RITC")
+            else:
                 self.converter.convert_ritc(qty) # Convert RITC to BULL and BEAR
+                place_mkt(USD, 'BUY',conversion_cost(qty))  # Hedge conversion cost
+                print(f"[Converted] RITC -> BB ")
             
             conv_unwind_qtf -= qty
 
@@ -209,7 +225,7 @@ def check_tender(converter):
 
         print(f"Evaluated profit : {eval_result}")
 
-        if eval_result['profitable'] > -1000000000:
+        if eval_result['profit'] > 1000:
             if T.accept_and_hedge_tender():
                 print(f"Accepted tender ID {tender['tender_id']}, profit {eval_result['profit']:.2f}")
                 T.unwind_tender_position()  # Trigger unwind
