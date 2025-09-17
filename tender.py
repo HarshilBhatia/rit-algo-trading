@@ -1,6 +1,6 @@
 from utils import *
 import time
-
+from rich import print 
 
 class EvaluateTenders():
 
@@ -37,11 +37,11 @@ class EvaluateTenders():
         if self.action == 'SELL':  # You sell RITC, go short
             for level in ritc_asks:
                 profit = level['quantity'] * (self.price - level['price'])
-                self.positions.append({'type': 'ETF', 'level_price': level['price'], 'level_qty': level['quantity'], 'profit': profit / level['quantity'],'profit_with_q': profit})
+                self.positions.append({'type': 'ETF', 'price': level['price'], 'level_qty': level['quantity'], 'profit': profit / level['quantity'],'profit_with_q': profit})
         elif self.action == 'BUY':  # You buy RITC, go long, need to sell at bid levels
             for level in ritc_bids:
                 profit = level['quantity'] * (level['price'] - self.price)
-                self.positions.append({'type': 'ETF', 'level_price': level['price'], 'level_qty': level['quantity'],  'profit': profit / level['quantity'], 'profit_with_q': profit})
+                self.positions.append({'type': 'ETF', 'price': level['price'], 'level_qty': level['quantity'],  'profit': profit / level['quantity'], 'profit_with_q': profit})
 
 
         self.positions_stocks = [] 
@@ -53,7 +53,7 @@ class EvaluateTenders():
                 q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
                 profit = q* (self.price - (level_bull['price'] + level_bear['price'])) - conversion_cost(q) # this should be per 10000.
                 self.positions.append({'type': 'STOCK',
-                                    'level_price ': level_bull['price'] + level_bear['price'],
+                                    'price': level_bull['price'] + level_bear['price'],
                                     'level_qty': q,
                                     'profit': profit / (q),
                                     'profit_with_q': profit})
@@ -65,7 +65,7 @@ class EvaluateTenders():
                 profit = q* ((level_bull['price'] + level_bear['price'])  - self.price) - conversion_cost(q) # this should be per 10000.
                 self.positions.append({
                                     'type': 'STOCK',
-                                    'level_price ': level_bull['price'] + level_bear['price'],
+                                    'price': level_bull['price'] + level_bear['price'],
                                     'level_qty': q,
                                     'profit': profit / (q),
                                     'profit_with_q': profit})
@@ -73,10 +73,11 @@ class EvaluateTenders():
 
         self.positions.sort(key=lambda x: x['profit'], reverse=True)
 
+
         net_profit = 0
         q_left = self.quantity
 
-        self.etf_avg_price, self.stock_avg_price = 0,0
+        e_pv, s_pv = 0,0 # price*volumne
 
         for p in self.positions:
             if q_left >= p['level_qty']:
@@ -84,27 +85,31 @@ class EvaluateTenders():
                 net_profit += p['level_qty'] * p['profit']
                 if p['type'] == 'STOCK':
                     self.stock_pos += p['level_qty']
-                    self.stock_avg_price = p['level_price'] * p['level_qty'] 
+                    s_pv += p['price'] * p['level_qty'] 
                 elif p['type'] == 'ETF':
-                    self.etf_avg_price = p['level_price'] * p['level_qty'] 
+                    e_pv += p['price'] * p['level_qty'] 
                     self.etf_pos += p['level_qty']
             else:
                 net_profit +=  q_left * p['profit']
                 if p['type'] == 'STOCK':
                     self.stock_pos += q_left
-                    self.stock_avg_price = p['level_price'] * q_left
+                    s_pv += p['price'] * q_left
                 elif p['type'] == 'ETF':
                     self.etf_pos += q_left
-                    self.etf_avg_price = p['level_price'] * q_left
+                    e_pv += p['price'] * q_left
 
                 q_left = 0 
 
-        self.etf_avg_price = self.etf_avg_price / self.etf_pos if self.etf_pos > 0 else 0
-        self.stock_avg_price = self.stock_avg_price / self.stock_pos if self.stock_pos > 0 else 0
+        self.etf_avg_price = e_pv / self.etf_pos if self.etf_pos > 0 else 0
+        self.stock_avg_price = s_pv / self.stock_pos if self.stock_pos > 0 else 0
 
-        print('vanilla profit:', net_profit)
+        print("*********************** [TENDER EVAL] ***********************")
+
+        print('VANILLA PROFIT:', net_profit)
         net_profit -= 0.02*self.etf_pos  + 0.02 * 2 * self.stock_pos# 
-        print("Profit:", net_profit, 'etf pos:', self.etf_pos, 'stock pos', self.stock_pos)
+        print("PROFIT:", net_profit)
+        print("ETF POS:", self.etf_pos, 'ETF PRICE:', self.etf_avg_price)
+        print("STOCK POS", self.stock_pos, 'STOCK PRICE', self.stock_avg_price)
 
         profitable = net_profit > 0
 
@@ -149,80 +154,89 @@ class EvaluateTenders():
         qty = min(MAX_SIZE_EQUITY, self.unwind_conversion)
 
         if self.action == 'SELL':
-            self.converter.convert_bull_bear(qty) # Convert BULL and BEAR to RITC
+            order = self.converter.convert_bull_bear(qty) # Convert BULL and BEAR to RITC
             place_mkt(USD, 'BUY',conversion_cost(qty))  # Hedge conversion cost
-            print(f"[Converted] BB -> RITC")
+            if order.ok:
+                self.unwind_conversion -= qty
+                print(f"[Converted] BB -> RITC {qty} ")
+            else:
+                print(f"[red] [ERROR] couldn't create tender offer {order.status_code} {order.text}")
+
         else:
-            self.converter.convert_ritc(qty) # Convert RITC to BULL and BEAR
+            order = self.converter.convert_ritc(qty) # Convert RITC to BULL and BEAR
             place_mkt(USD, 'BUY',conversion_cost(qty))  # Hedge conversion cost
-            print(f"[Converted] RITC -> BB ")
-            
-        self.unwind_conversion -= qty
+            if order.ok:
+                print(f"[Converted] RITC -> BB {qty} ")
+                self.unwind_conversion -= qty
+            else:
+                print(f"[red] [ERROR] couldn't create tender offer {order.status_code} {order.text}")
         
 
     def unwind_tender_position(self):
 
         unwind_qty = self.etf_pos
 
-        # hedge transaction costs. 
-        hedge_cost = unwind_qty * 0.02 
+        # hedge transaction costs.
+        hedge_cost = unwind_qty * 0.02
 
         fx_hedge_conv = (self.quantity - self.etf_pos) * self.price  # USD quantity to hedge -- based on stock position.
 
         # ETF unwind (direct)
 
-        print("*********************** [UNWIND] ***********************")
+        print("\n\n*********************** [UNWIND] ***********************")
         # TODO: GROSS LIMIT PROBLEM
-        avg_price = []
+        self.etf_avg_unwind =0
+
+        print("\n==== ETF ====")
         if self.action == 'SELL':  # You need to buy back RITC to close short
             # CHUNKS of 10k 
-            order = place_mkt(USD, "BUY", hedge_cost)  # Hedge the USD transaction cost
             hedge_fx("SELL", fx_hedge_conv)  # Conversion remaining USD Hedge
+
+            if unwind_qty > 0:
+                order = place_mkt(USD, "BUY", hedge_cost)  # Hedge the USD transaction cost
 
             while unwind_qty > 0:
                 qty = min(MAX_SIZE_EQUITY, unwind_qty)
                 order = place_mkt(RITC, "BUY", qty)
-                avg_price.append(order['vwap'])
-                print(f"[BUY] {qty} at {order['vwap']}")
+
+                self.etf_avg_unwind += order['vwap']* qty
+                print(f"[BUY] RITC {qty} at {order['vwap']}")
                 unwind_qty -= qty
 
         else:  # action == 'BUY', you need to sell RITC to close long
 
-            place_mkt(USD, "BUY", hedge_cost)  # Hedge the USD transaction cost
             hedge_fx("BUY", fx_hedge_conv)  # Conversion remaining USD Hedge
+
+
+            if unwind_qty > 0:
+                place_mkt(USD, "BUY", hedge_cost)  # Hedge the USD transaction cost
             
             while unwind_qty > 0:
                 qty = min(MAX_SIZE_EQUITY, unwind_qty)
                 order = place_mkt(RITC, "SELL", qty)
-                avg_price.append(order['vwap'])
-                print(f"[SELL] {qty} at {order['vwap']}")
+                self.etf_avg_unwind += order['vwap']* qty
+
+                print(f"[SELL] RITC {qty} at {order['vwap']}")
                 unwind_qty -= qty
 
-        # Calculate average price
-        if avg_price:
-            avg_price = sum(avg_price) / len(avg_price)
-        else:
-            avg_price = 0
-
-        print("======= STATS -- DIRECT ETF =======")
-        print("Average price:", avg_price)
-        print(f"Estimated Price: {self.etf_avg_price}")
-        print(f"Slippage: {self.etf_avg_price - avg_price} per share")
-        print(f"PnL (from Tender offer): {(self.price - avg_price) * self.etf_pos if self.action == 'SELL' else (avg_price - self.price) * self.etf_pos}")
-        print("===================================")
+        # Calculate etf unwind average price
+        self.etf_avg_unwind = self.etf_avg_unwind / self.etf_pos if self.etf_pos >0 else 0
 
         # convert_later = 0
         self.unwind_stocks = self.stock_pos
         self.unwind_conversion = self.stock_pos
         self.avg_stock_unwind = 0 
 
+
+        print("\n==== BULL + BEAR ====")
+
         while self.unwind_stocks > 0 or self.unwind_conversion > 0:
 
             qty = min(MAX_SIZE_EQUITY, self.unwind_stocks)
             flag = 0 
-            if self.action == 'SELL' and get_position_limits_impact(0, +qty, qty): # RITC, BULL, BEAR -- buying Bull and bear.
+            if self.action == 'SELL' and not get_position_limits_impact(0, +qty, qty): # RITC, BULL, BEAR -- buying Bull and bear.
                 flag = 1
-            if self.action == 'BUY' and get_position_limits_impact(0, -qty, -qty): # RITC, BULL, BEAR -- buying Bull and bear.
+            if self.action == 'BUY' and not get_position_limits_impact(0, -qty, -qty): # RITC, BULL, BEAR -- buying Bull and bear.
                 flag = 1
         
             # this is done so that gross limit problems don't occur.
@@ -237,11 +251,22 @@ class EvaluateTenders():
 
 
         self.avg_stock_unwind = self.avg_stock_unwind / (self.stock_pos) if self.stock_pos > 0 else 0
+       
+       
+        
+        print("======= STATS -- DIRECT ETF =======")
+        print("Average price:", self.avg_etf_unwind)
+        print(f"Estimated Price: {self.etf_avg_price}")
+        print(f"Slippage: {self.etf_avg_price - self.avg_etf_unwind} per share")
+        print(f"PnL (from Tender offer): {(self.price - self.avg_etf_unwind) * self.etf_pos if self.action == 'SELL' else (avg_price - self.price) * self.etf_pos}")
+        print("===================================")
+
+       
         print("======= STATS -- CONVERSION =======")
         print("Average price:", self.avg_stock_unwind)
         print(f"Estimated Price: {self.avg_stock_unwind}")
-        print(f"Slippage: {self.avg_stock_unwind - avg_price} per share")
-        print(f"PnL (from Tender offer): {(self.price - avg_price) * self.etf_pos if self.action == 'SELL' else (avg_price - self.price) * self.etf_pos}")
+        print(f"Slippage: {self.stock_avg_price - self.avg_stock_unwind } per share")
+        print(f"PnL (from Tender offer): {(self.price - self.avg_stock_unwind) * self.stock_pos if self.action == 'SELL' else (avg_price - self.price) * self.etf_pos}")
         print("===================================")
            
 
