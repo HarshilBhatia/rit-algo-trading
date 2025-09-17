@@ -95,13 +95,13 @@ def accept_and_hedge_tender(tender):
     usd_quantity = tender['price'] * tender['quantity']
     accept_tender(tender)
     # fx hedge
-    place_mkt(USD, tender['action'], usd_quantity)    
+    # place_mkt(USD, tender['action'], usd_quantity)    
     # Place the tender order
     
     return True
 
 
-def unwind_tender_position(tender, eval_result):
+def unwind_tender_position(tender, eval_result, converter):
     action = tender['action']
     q_left = tender['quantity']
 
@@ -133,40 +133,40 @@ def unwind_tender_position(tender, eval_result):
             })
 
     # Stocks + converter unwind
-    if action == 'SELL':
-        # Need to buy BULL and BEAR, then convert to RITC
-        bull_asks = bull_book['asks']
-        bear_asks = bear_book['asks']
-        for bull_level, bear_level in zip(bull_asks, bear_asks):
-            qty = min(bull_level['quantity'], bear_level['quantity'], CONVERTER_BATCH)
-            if qty <= 0:
-                continue
-            total_price = bull_level['price'] + bear_level['price']
-            total_cost = qty * total_price + CONVERTER_COST * (qty / CONVERTER_BATCH)
-            unwind_options.append({
-                'type': 'CONVERT',
-                'price': total_price,
-                'qty': qty,
-                'action': 'BUY',
-                'total_cost': total_cost
-            })
-    else:
-        # Need to sell BULL and BEAR, after redeeming RITC
-        bull_bids = bull_book['bids']
-        bear_bids = bear_book['bids']
-        for bull_level, bear_level in zip(bull_bids, bear_bids):
-            qty = min(bull_level['quantity'], bear_level['quantity'], CONVERTER_BATCH)
-            if qty <= 0:
-                continue
-            total_price = bull_level['price'] + bear_level['price']
-            total_cost = -qty * total_price + CONVERTER_COST * (qty / CONVERTER_BATCH)
-            unwind_options.append({
-                'type': 'CONVERT',
-                'price': total_price,
-                'qty': qty,
-                'action': 'SELL',
-                'total_cost': total_cost
-            })
+    # if action == 'SELL':
+    #     # Need to buy BULL and BEAR, then convert to RITC
+    #     bull_asks = bull_book['asks']
+    #     bear_asks = bear_book['asks']
+    #     for bull_level, bear_level in zip(bull_asks, bear_asks):
+    #         qty = min(bull_level['quantity'], bear_level['quantity'], CONVERTER_BATCH)
+    #         if qty <= 0:
+    #             continue
+    #         total_price = bull_level['price'] + bear_level['price']
+    #         total_cost = qty * total_price + CONVERTER_COST * (qty / CONVERTER_BATCH)
+    #         unwind_options.append({
+    #             'type': 'CONVERT',
+    #             'price': total_price,
+    #             'qty': qty,
+    #             'action': 'BUY',
+    #             'total_cost': total_cost
+    #         })
+    # else:
+    #     # Need to sell BULL and BEAR, after redeeming RITC
+    #     bull_bids = bull_book['bids']
+    #     bear_bids = bear_book['bids']
+    #     for bull_level, bear_level in zip(bull_bids, bear_bids):
+    #         qty = min(bull_level['quantity'], bear_level['quantity'], CONVERTER_BATCH)
+    #         if qty <= 0:
+    #             continue
+    #         total_price = bull_level['price'] + bear_level['price']
+    #         total_cost = -qty * total_price + CONVERTER_COST * (qty / CONVERTER_BATCH)
+    #         unwind_options.append({
+    #             'type': 'CONVERT',
+    #             'price': total_price,
+    #             'qty': qty,
+    #             'action': 'SELL',
+    #             'total_cost': total_cost
+    #         })
 
     # Sort by best (lowest) total_cost for BUY, highest for SELL
     if action == 'SELL':
@@ -204,12 +204,12 @@ def unwind_tender_position(tender, eval_result):
     print("[UPDATE] Conversion step pending for the qty", convert_later)
 
     if opt['action'] == 'BUY' and convert_later > 0:
-        Converter.convert_bull_bear(convert_later)
+        converter.convert_bull_bear(convert_later)
         print(f"Converted {convert_later} BULL and BEAR via converter after buying stocks")
 
 
     elif opt['action'] == 'SELL' and convert_later > 0:
-        Converter.convert_ritc(convert_later)
+        converter.convert_ritc(convert_later)
         print(f"Converted {convert_later} RITC via converter after redeeming RITC")
 
 

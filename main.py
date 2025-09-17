@@ -10,7 +10,7 @@ import numpy as np
 import pickle 
 from tabulate import tabulate
 import time 
-import tender
+from tender import * 
 from utils import *
 from etf_arb import check_conversion_arbitrage
 '''
@@ -40,7 +40,7 @@ s.headers.update(HDRS)
 # New evaluation function for Step 2
 
 # --------- CORE LOGIC ----------
-def step_once():
+def step_once(converter):
 
     bull = best_bid_ask_entire_depth(BULL)
     bear = best_bid_ask_entire_depth(BEAR)
@@ -51,21 +51,20 @@ def step_once():
     tenders = get_tenders()
     unwinding_active = False  # Flag for later
     for tender in tenders:  # Prioritize by profit? Sort if multiple
-        exit()
 
         if tender['tender_id'] in tender_ids_eval:
             continue
         
         tender_ids_eval.add(tender['tender_id'])
 
-        eval_result = tender.evaluate_tender_profit(tender, usd, bull, bear, ritc)
+        eval_result = evaluate_tender_profit(tender, usd, bull, bear, ritc)
 
         print(f"Evaluated profit : {eval_result}")
 
-        if eval_result['profitable'] :
-            if tender.accept_and_hedge_tender(tender):
+        if eval_result['profitable'] > -1000000000:
+            if accept_and_hedge_tender(tender):
                 print(f"Accepted tender ID {tender['tender_id']}, profit {eval_result['profit']:.2f}")
-                tender.unwind_tender_position(tender, eval_result)  # Trigger unwind
+                unwind_tender_position(tender, eval_result, converter)  # Trigger unwind
             else:
                 print(f"Failed to accept tender ID {tender['tender_id']}")
         else:
@@ -96,7 +95,7 @@ def main():
     
     while status == "ACTIVE":
         check_conversion_arbitrage(converter)
-        step_once()
+        step_once(converter)
         sleep(0.5)
         tick, status = get_tick_status()
 
@@ -113,7 +112,7 @@ def test_tender_code():
                 with open(file_path, 'rb') as f:
                     data = pickle.load(f)
                     tender.evaluate_tender_profit(data['tender'], data['usd'], data['bull'], data['bear'], data['ritc'])
-                    print(data['tender'])
+
                     
 
     
