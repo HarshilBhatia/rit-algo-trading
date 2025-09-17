@@ -188,52 +188,46 @@ def check_conversion_arbitrage():
     # # place_mkt("USD", "SELL", 10000)
     # exit()
 
-    q = ORDER_QTY
+    q = ORDER_QTY  # Assumed 10,000
 
-    # Direction 1: Convert basket to ETF (buy basket, convert, sell ETF)
-    basket_cost = basket_to_etf_value(bull_ask, bear_ask, q) #  bought 
-    etf_proceeds = ritc_bid_usd * q #
-    profit1 = etf_proceeds - basket_cost # USD 
+    # Direction 1: Basket → ETF
+    basket_cost_cad = basket_to_etf_value(bull_ask, bear_ask, q)  # CAD
+    etf_proceeds_cad = ritc_bid_usd * q * usd_bid  # USD to CAD
+    profit1 = etf_proceeds_cad - basket_cost_cad - 1500  # CAD, including ETF-Creation cost
 
-    # Direction 2: Convert ETF to basket (buy ETF, convert, sell basket)
-    etf_cost = etf_to_basket_value(ritc_ask_usd, q) # 
-    basket_proceeds = (bull_bid + bear_bid) * q
-    profit2 = basket_proceeds - etf_cost  # CAD
+    # Direction 2: ETF → Basket
+    etf_cost_cad = ritc_ask_usd * q * usd_ask  # CAD
+    basket_proceeds = (bull_bid + bear_bid) * q  # CAD
+    profit2 = basket_proceeds - etf_cost_cad - 1500  # CAD, including ETF-Redemption cost
 
-    
     # Place trades if profitable
     if profit1 > 2000 and within_limits():
-        # print(f"Basket→ETF profit: {profit1:.2f} for {q} shares")
-        br = place_mkt(BULL, "BUY", q)['vwap']
-        bl = place_mkt(BEAR, "BUY", q)['vwap']
-
-        
-        r1 = place_mkt(RITC, "SELL", q)['vwap']
-        # BUY USD Back
-        print(f"[FX] Selling USD {q*r1}")
-        usd = place_mkt("USD", "SELL", r1*q)['vwap']
-        print(f"Sold it as {usd}")
-        print('profit', q*(r1*usd_ask - bl - br) - 1500*usd_bid , 'CAD') #w/o fx charges
- 
-        out = convert_bull_bear(q)
-
-        print("[ARBITRAGE] Basket -> ETF")
-        
+        try:
+            br = place_mkt(BULL, "BUY", q)['vwap']  # CAD
+            bl = place_mkt(BEAR, "BUY", q)['vwap']  # CAD
+            out = convert_bull_bear(q)  # ETF-Creation, $1,500 CAD
+            r1 = place_mkt(RITC, "SELL", q)['vwap']  # USD
+            print(f"[FX] Selling USD {q*r1}")
+            usd = place_mkt("USD", "SELL", r1*q)['vwap']  # CAD per USD
+            profit = q * (r1 * usd - bl - br) - 1500  # CAD
+            print(f"Profit: {profit:.2f} CAD")
+            print("[ARBITRAGE] Basket -> ETF")
+        except Exception as e:
+            print(f"Basket -> ETF trade failed: {e}")
 
     elif profit2 > 2000 and within_limits():
-        print(f"ETF→Basket profit: {profit2:.2f} CAD for {q} shares")
-        r1 = place_mkt(RITC, "BUY", q)['vwap']
-        print(f"[FX] Buying USD {q*r1}")
-        usd = place_mkt("USD", "BUY", r1*q)['vwap']
-        print(f"Got it at {usd}") # w/o fx charges.
-        
-        
-        bl = place_mkt(BULL, "SELL", q)['vwap']
-        br = place_mkt(BEAR, "SELL", q)['vwap']
-
-        out = convert_ritc(q)
-        
-        print("[ARBITRAGE] ETF -> Basket")
+        try:
+            r1 = place_mkt(RITC, "BUY", q)['vwap']  # USD
+            print(f"[FX] Buying USD {q*r1}")
+            usd = place_mkt("USD", "BUY", r1*q)['vwap']  # CAD per USD
+            out = convert_ritc(q)  # ETF-Redemption, $1,500 CAD
+            bl = place_mkt(BULL, "SELL", q)['vwap']  # CAD
+            br = place_mkt(BEAR, "SELL", q)['vwap']  # CAD
+            profit = q * (bl + br - r1 * usd) - 1500  # CAD
+            print(f"Profit: {profit:.2f} CAD")
+            print("[ARBITRAGE] ETF -> Basket")
+        except Exception as e:
+            print(f"ETF -> Basket trade failed: {e}")
 
 # Example usage in main loop:
 def main():
