@@ -123,29 +123,31 @@ class EvaluateTenders():
         # hedge transaction costs. 
         hedge_cost = unwind_qty * 0.02 
 
-
-
+        fx_hedge_conv = (self.quantity - self.etf_pos) * self.price  # USD quantity to hedge -- based on stock position.
 
         # ETF unwind (direct)
         avg_price = []
         if self.action == 'SELL':  # You need to buy back RITC to close short
             # CHUNKS of 10k 
             place_mkt(USD, "BUY", hedge_cost)  # Hedge the USD transaction cost
+            place_mkt(USD, "SELL", fx_hedge_conv)  # Conversion remaining USD Hedge
 
-            for i in range(0, int(unwind_qty), MAX_SIZE_EQUITY):
-                qty = min(MAX_SIZE_EQUITY, unwind_qty - i)
+            while unwind_qty > 0:
+                qty = min(MAX_SIZE_EQUITY, unwind_qty)
                 resp = place_mkt(RITC, "BUY", qty)
                 avg_price.append(resp['vwap'])
-                # unwind_qty -= qty
+                unwind_qty -= qty
 
         else:  # action == 'BUY', you need to sell RITC to close long
 
-            place_mkt(USD, "SELL", hedge_cost)  # Hedge the USD transaction cost
+            place_mkt(USD, "BUY", hedge_cost)  # Hedge the USD transaction cost
+            place_mkt(USD, "BUY", fx_hedge_conv)  # Conversion remaining USD Hedge
             
-            for i in range(0, int(unwind_qty), MAX_SIZE_EQUITY):
-                qty = min(MAX_SIZE_EQUITY, unwind_qty - i)
+            while unwind_qty > 0:
+                qty = min(MAX_SIZE_EQUITY, unwind_qty)
                 resp = place_mkt(RITC, "SELL", qty)
                 avg_price.append(resp['vwap'])
+                unwind_qty -= qty
 
         # Calculate average price
         if avg_price:
@@ -153,52 +155,30 @@ class EvaluateTenders():
         else:
             avg_price = 0
 
-        # Sort by best (lowest) total_cost for BUY, highest for SELL
-        # if action == 'SELL':
-        #     unwind_options.sort(key=lambda x: x['total_cost'])
-        # else:
-        #     unwind_options.sort(key=lambda x: -x['total_cost'])
-
         # convert_later = 0
+        conv_unwind_qtf = self.stock_pos
         # # Execute orders in ranked order until q_left is zero
-        # for opt in unwind_options:
-        #     if q_left <= 0:
-        #         break
-        #     qty = min(opt['qty'], q_left, MAX_SIZE_EQUITY)
-        #     if qty <= 0:
-        #         continue
-        #     if opt['type'] == 'ETF':
-        #         place_mkt(RITC, opt['action'], qty)
-        #         print(f"Unwound {qty} RITC via ETF {opt['action']} at {opt['price']}")
-        #     else:
-        #         # Stocks + converter
-        #         if opt['action'] == 'BUY':
-        #             place_mkt(BULL, 'BUY', qty)
-        #             place_mkt(BEAR, 'BUY', qty)
-        #             print(f"Bought {qty} BULL & BEAR, then converted to RITC (manual step)")
-        #         else:
-        #             print(f"Redeemed {qty} RITC, then selling stocks (manual step)")
-        #             place_mkt(BULL, 'SELL', qty)
-        #             place_mkt(BEAR, 'SELL', qty)
         
-        #         convert_later += qty
+        while conv_unwind_qtf > 0:
+            qty = min(MAX_SIZE_EQUITY, conv_unwind_qtf)
 
-        #     q_left -= qty
+            if self.action == 'SELL':
+                place_mkt(BULL, 'BUY', qty)
+                place_mkt(BEAR, 'BUY', qty)
+                self.converter.convert_bull_bear(qty) # Convert BULL and BEAR to RITC
 
+                place_mkt(USD, 'BUY', conversion_cost(qty))  # Hedge conversion cost
+                print(f"Bought {qty} BULL & BEAR, then converted to RITC (manual step)")
+            else:
+                print(f"Redeemed {qty} RITC, then selling stocks (manual step)")
+                place_mkt(BULL, 'SELL', qty)
+                place_mkt(BEAR, 'SELL', qty)
 
-        # print("[UPDATE] Conversion step pending for the qty", convert_later)
-
-        # if opt['action'] == 'BUY' and convert_later > 0:
-        #     converter.convert_bull_bear(convert_later)
-        #     print(f"Converted {convert_later} BULL and BEAR via converter after buying stocks")
-
-
-        # elif opt['action'] == 'SELL' and convert_later > 0:
-        #     converter.convert_ritc(convert_later)
-        #     print(f"Converted {convert_later} RITC via converter after redeeming RITC")
-
-
-        # print("Unwind complete")
+                place_mkt(USD, 'BUY', conversion_cost(qty))  # Hedge conversion cost
+                self.converter.convert_ritc(qty) # Convert RITC to BULL and BEAR
+            
+            conv_unwind_qtf -= qty
+        
 
 
 def check_tender(converter):
