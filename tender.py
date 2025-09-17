@@ -4,17 +4,19 @@ import time
 
 class EvaluateTenders():
 
-    def __init__(self, tender):
+    def __init__(self, tender, converter):
         self.positions = {} 
         self.stock_pos, self.etf_pos = 0,0 
+        self.tender = tender
         self.action = tender['action']
         self.price = tender['price']
         self.quantity = tender['quantity']
+        self.converter = converter 
         
         pass
 
     # 
-    def evaluate_tender_profit(self, tender, usd = None, bull = None, bear = None, ritc = None):
+    def evaluate_tender_profit(self, usd = None, bull = None, bear = None, ritc = None):
 
         # TODO: The idea here will be -- evaulate cost (ETF) / individual + conv per bid / ask. 
         # Then rank them -- and calculate the expected payout till we reach the quantity. 
@@ -101,11 +103,11 @@ class EvaluateTenders():
         }
 
 
-    def accept_and_hedge_tender(self, tender):
+    def accept_and_hedge_tender(self):
         
         # if buy tender
-        usd_quantity = tender['price'] * self.etf_pos  # USD quantity to hedge -- based on ETF position.
-        accept_tender(tender)
+        usd_quantity = self.tender['price'] * self.etf_pos  # USD quantity to hedge -- based on ETF position.
+        accept_tender(self.tender)
         # fx hedge
         # place_mkt(USD, tender['action'], usd_quantity)    
         # Place the tender order
@@ -114,7 +116,7 @@ class EvaluateTenders():
 
 
 
-    def unwind_tender_position(self, eval_result, converter):
+    def unwind_tender_position(self, converter):
 
         unwind_qty = self.etf_pos
 
@@ -129,7 +131,7 @@ class EvaluateTenders():
         if self.action == 'SELL':  # You need to buy back RITC to close short
             # CHUNKS of 10k 
             place_mkt(USD, 'BUY', hedge_cost)  # Hedge the USD transaction cost
-            
+
             for i in range(0, unwind_qty, MAX_SIZE_EQUITY):
                 qty = min(MAX_SIZE_EQUITY, unwind_qty - i)
                 resp = place_mkt(RITC, "BUY", qty)
@@ -202,24 +204,24 @@ class EvaluateTenders():
 def check_tender(converter):
 
   
+    
     # Tender handling
     tenders = get_tenders()
     unwinding_active = False  # Flag for later
     for tender in tenders:  # Prioritize by profit? Sort if multiple
 
-        if tender['tender_id'] in tender_ids_eval:
-            continue
-        
-        tender_ids_eval.add(tender['tender_id'])
 
-        eval_result = evaluate_tender_profit(tender, usd, bull, bear, ritc)
+        T = EvaluateTenders(tender, converter) 
+        # tender_ids_eval.add(tender['tender_id'])
+
+        eval_result = T.evaluate_tender_profit()
 
         print(f"Evaluated profit : {eval_result}")
 
         if eval_result['profitable'] > -1000000000:
-            if accept_and_hedge_tender(tender):
+            if T.accept_and_hedge_tender():
                 print(f"Accepted tender ID {tender['tender_id']}, profit {eval_result['profit']:.2f}")
-                unwind_tender_position(tender, eval_result, converter)  # Trigger unwind
+                T.unwind_tender_position()  # Trigger unwind
             else:
                 print(f"Failed to accept tender ID {tender['tender_id']}")
         else:
