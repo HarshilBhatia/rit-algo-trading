@@ -1,216 +1,244 @@
 from utils import *
 import time
 
-def evaluate_tender_profit(tender, usd, bull, bear, ritc):
 
-    # TODO: The idea here will be -- evaulate cost (ETF) / individual + conv per bid / ask. 
-    # Then rank them -- and calculate the expected payout till we reach the quantity. 
+class EvaluateTenders():
 
-    # TODO: Think how you'll unwind this position. 
-
-
-    t_start = time.time()
-    action = tender['action']  # 'SELL' (you sell) or 'BUY' (you buy)
-    p_tender = tender['price']  # USD
-    q_tender = tender['quantity']
-
-    ritc_asks , ritc_bids = ritc['asks'], ritc['bids']
-    profits = [] 
-
-    # i want to compute the direct profit at each bid and ask level. 
-
-    if action == 'SELL':  # You sell RITC, go short
-        for level in ritc_asks:
-            profit = level['quantity'] * (p_tender - level['price'])
-            profits.append({'type': 'E', 'level_price': level['price'], 'level_qty': level['quantity'], 'profit': profit / level['quantity'],'profit_with_q': profit})
-    elif action == 'BUY':  # You buy RITC, go long, need to sell at bid levels
-        for level in ritc_bids:
-            profit = level['quantity'] * (level['price'] - p_tender)
-            profits.append({'type': 'E', 'level_price': level['price'], 'level_qty': level['quantity'],  'profit': profit / level['quantity'], 'profit_with_q': profit})
-
-
-    profits_stocks = [] 
-    bull_asks , bull_bids = bull['asks'], bull['bids']
-    bear_asks , bear_bids = bear['asks'], bear['bids']
-
-    if action == 'SELL':
-        for level_bull, level_bear in zip(bull_asks, bear_asks):
-            q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
-            profit = q* (p_tender - (level_bull['price'] + level_bear['price'])) - CONVERTER_COST * q / 10000 # this should be per 10000.
-            # profits_stocks.append({'level_price_bull': level_bull['price'], 'level_qty_bull': level_bull['quantity'], 
-            #                        'level_price_bear': level_bear['price'], 'level_qty_bear': level_bear['quantity'],
-            #                        'profit': profit})
-            profits.append({'type': 'S',
-                                   'level_price ': level_bull['price'] + level_bear['price'],
-                                   'level_qty': q,
-                                   'profit': profit / (q),
-                                   'profit_with_q': profit})
-            
-    elif action == 'BUY':
-        for level_bull, level_bear in zip(bull_bids, bear_bids):
-            q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
-            profit = q* ((level_bull['price'] + level_bear['price'])  - p_tender) - CONVERTER_COST # this should be per 10000.
-            profits.append({
-                # 'level_price_bull': level_bull['price'],  
-                                #    'level_price_bear': level_bear['price'], 
-                                    'type': 'S',
-                                   'level_price ': level_bull['price'] + level_bear['price'],
-                                   'level_qty': q,
-                                   'profit': profit / (q),
-                                   'profit_with_q': profit})
-
-
-    # print("Profits at each level via stocks, with the adjusted conversion cost")
-
-    profits.sort(key=lambda x: x['profit'], reverse=True)
-
-    net_profit = 0 
-    q_left = q_tender 
-    for p in profits:
-        if q_left >= p['level_qty']:
-            q_left -= p['level_qty']
-            net_profit += p['level_qty'] * p['profit']
-        else:
-            q_left = 0 
-            net_profit +=  q_left * p['profit']
-
+    def __init__(self, tender):
+        self.positions = {} 
+        self.stock_pos, self.etf_pos = 0,0 
+        self.action = tender['action']
+        self.price = tender['price']
+        self.quantity = tender['quantity']
         
+        pass
 
-    print("Profit:", net_profit, time.time() - t_start)
+    # 
+    def evaluate_tender_profit(self, tender, usd = None, bull = None, bear = None, ritc = None):
 
-    # merge the 2 points 
+        # TODO: The idea here will be -- evaulate cost (ETF) / individual + conv per bid / ask. 
+        # Then rank them -- and calculate the expected payout till we reach the quantity. 
 
-    # threshold = q_tender * p_tender * usd_bid * PROFIT_THRESHOLD_PCT
-    profitable = net_profit > 0
-
-    return {
-        'profitable': profitable,
-        'profit': net_profit,
-    }
+        # TODO: Think how you'll unwind this position. 
 
 
-def accept_and_hedge_tender(tender):
-    
-    # if buy tender
-    usd_quantity = tender['price'] * tender['quantity']
-    accept_tender(tender)
-    # fx hedge
-    # place_mkt(USD, tender['action'], usd_quantity)    
-    # Place the tender order
-    
-    return True
+        if usd == None: 
+            bull = best_bid_ask_entire_depth(BULL)
+            bear = best_bid_ask_entire_depth(BEAR)
+            ritc  = best_bid_ask_entire_depth(RITC)
+            usd = best_bid_ask_entire_depth(USD)   
 
 
-def unwind_tender_position(tender, eval_result, converter):
-    action = tender['action']
-    q_left = tender['quantity']
 
-    # Get fresh books
-    ritc_book = best_bid_ask_entire_depth(RITC)
-    bull_book = best_bid_ask_entire_depth(BULL)
-    bear_book = best_bid_ask_entire_depth(BEAR)
 
-    unwind_options = []
 
-    # ETF unwind (direct)
-    if action == 'SELL':  # You need to buy back RITC to close short
-        for level in ritc_book['asks']:
-            unwind_options.append({
-                'type': 'ETF',
-                'price': level['price'],
-                'qty': level['quantity'],
-                'action': 'BUY',
-                'total_cost': level['price'] * level['quantity']
-            })
-    else:  # action == 'BUY', you need to sell RITC to close long
-        for level in ritc_book['bids']:
-            unwind_options.append({
-                'type': 'ETF',
-                'price': level['price'],
-                'qty': level['quantity'],
-                'action': 'SELL',
-                'total_cost': -level['price'] * level['quantity']
-            })
+        ritc_asks , ritc_bids = ritc['asks'], ritc['bids']
 
-    # Stocks + converter unwind
-    # if action == 'SELL':
-    #     # Need to buy BULL and BEAR, then convert to RITC
-    #     bull_asks = bull_book['asks']
-    #     bear_asks = bear_book['asks']
-    #     for bull_level, bear_level in zip(bull_asks, bear_asks):
-    #         qty = min(bull_level['quantity'], bear_level['quantity'], CONVERTER_BATCH)
-    #         if qty <= 0:
-    #             continue
-    #         total_price = bull_level['price'] + bear_level['price']
-    #         total_cost = qty * total_price + CONVERTER_COST * (qty / CONVERTER_BATCH)
-    #         unwind_options.append({
-    #             'type': 'CONVERT',
-    #             'price': total_price,
-    #             'qty': qty,
-    #             'action': 'BUY',
-    #             'total_cost': total_cost
-    #         })
-    # else:
-    #     # Need to sell BULL and BEAR, after redeeming RITC
-    #     bull_bids = bull_book['bids']
-    #     bear_bids = bear_book['bids']
-    #     for bull_level, bear_level in zip(bull_bids, bear_bids):
-    #         qty = min(bull_level['quantity'], bear_level['quantity'], CONVERTER_BATCH)
-    #         if qty <= 0:
-    #             continue
-    #         total_price = bull_level['price'] + bear_level['price']
-    #         total_cost = -qty * total_price + CONVERTER_COST * (qty / CONVERTER_BATCH)
-    #         unwind_options.append({
-    #             'type': 'CONVERT',
-    #             'price': total_price,
-    #             'qty': qty,
-    #             'action': 'SELL',
-    #             'total_cost': total_cost
-    #         })
 
-    # Sort by best (lowest) total_cost for BUY, highest for SELL
-    if action == 'SELL':
-        unwind_options.sort(key=lambda x: x['total_cost'])
-    else:
-        unwind_options.sort(key=lambda x: -x['total_cost'])
+        # i want to compute the direct profit at each bid and ask level. 
 
-    convert_later = 0
-    # Execute orders in ranked order until q_left is zero
-    for opt in unwind_options:
-        if q_left <= 0:
-            break
-        qty = min(opt['qty'], q_left, MAX_SIZE_EQUITY)
-        if qty <= 0:
-            continue
-        if opt['type'] == 'ETF':
-            place_mkt(RITC, opt['action'], qty)
-            print(f"Unwound {qty} RITC via ETF {opt['action']} at {opt['price']}")
-        else:
-            # Stocks + converter
-            if opt['action'] == 'BUY':
-                place_mkt(BULL, 'BUY', qty)
-                place_mkt(BEAR, 'BUY', qty)
-                print(f"Bought {qty} BULL & BEAR, then converted to RITC (manual step)")
+        if self.action == 'SELL':  # You sell RITC, go short
+            for level in ritc_asks:
+                profit = level['quantity'] * (self.p_tender - level['price'])
+                self.positions.append({'type': 'ETF', 'level_price': level['price'], 'level_qty': level['quantity'], 'profit': profit / level['quantity'],'profit_with_q': profit})
+        elif self.action == 'BUY':  # You buy RITC, go long, need to sell at bid levels
+            for level in ritc_bids:
+                profit = level['quantity'] * (level['price'] - self.p_tender)
+                self.positions.append({'type': 'ETF', 'level_price': level['price'], 'level_qty': level['quantity'],  'profit': profit / level['quantity'], 'profit_with_q': profit})
+
+
+        self.positions_stocks = [] 
+        bull_asks , bull_bids = bull['asks'], bull['bids']
+        bear_asks , bear_bids = bear['asks'], bear['bids']
+
+        # if self.action == 'SELL':
+        #     for level_bull, level_bear in zip(bull_asks, bear_asks):
+        #         q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
+        #         profit = q* (self.price - (level_bull['price'] + level_bear['price'])) - CONVERTER_COST * q / 10000 # this should be per 10000.
+        #         self.positions.append({'type': 'STOCK',
+        #                             'level_price ': level_bull['price'] + level_bear['price'],
+        #                             'level_qty': q,
+        #                             'profit': profit / (q),
+        #                             'profit_with_q': profit})
+                
+        # elif self.action == 'BUY':
+        #     for level_bull, level_bear in zip(bull_bids, bear_bids):
+        #         q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
+        #         # this profit is wrong, doesn't account for usd / cad conversion.
+        #         profit = q* ((level_bull['price'] + level_bear['price'])  - self.p_tender) - CONVERTER_COST # this should be per 10000.
+        #         self.positions.append({
+        #                             'type': 'STOCK',
+        #                             'level_price ': level_bull['price'] + level_bear['price'],
+        #                             'level_qty': q,
+        #                             'profit': profit / (q),
+        #                             'profit_with_q': profit})
+
+
+        self.positions.sort(key=lambda x: x['profit'], reverse=True)
+
+        net_profit = 0
+        q_left = self.quantity
+
+        for p in self.positions:
+            if q_left >= p['level_qty']:
+                q_left -= p['level_qty']
+                net_profit += p['level_qty'] * p['profit']
+                if p['type'] == 'STOCK':
+                    self.stock_pos += p['level_qty']
+                elif p['type'] == 'ETF':
+                    self.etf_pos += p['level_qty']
             else:
-                print(f"Redeemed {qty} RITC, then selling stocks (manual step)")
-                place_mkt(BULL, 'SELL', qty)
-                place_mkt(BEAR, 'SELL', qty)
+                q_left = 0 
+                net_profit +=  q_left * p['profit']
+
+        print("Profit:", net_profit)
+
+        profitable = net_profit > 0
+
+        return {
+            'profitable': profitable,
+            'profit': net_profit,
+        }
+
+
+    def accept_and_hedge_tender(self, tender):
+        
+        # if buy tender
+        usd_quantity = tender['price'] * self.etf_pos  # USD quantity to hedge -- based on ETF position.
+        accept_tender(tender)
+        # fx hedge
+        # place_mkt(USD, tender['action'], usd_quantity)    
+        # Place the tender order
+        
+        return True
+
+
+
+    def unwind_tender_position(self, eval_result, converter):
+
+        unwind_qty = self.etf_pos
+
+        # hedge transaction costs. 
+        hedge_cost = unwind_qty * 0.02 
+
+
+
+
+        # ETF unwind (direct)
+        avg_price = []
+        if self.action == 'SELL':  # You need to buy back RITC to close short
+            # CHUNKS of 10k 
+            place_mkt(USD, 'BUY', hedge_cost)  # Hedge the USD transaction cost
+            
+            for i in range(0, unwind_qty, MAX_SIZE_EQUITY):
+                qty = min(MAX_SIZE_EQUITY, unwind_qty - i)
+                resp = place_mkt(RITC, "BUY", qty)
+                avg_price.append(resp['vwap'])
+                unwind_qty -= qty
+        else:  # action == 'BUY', you need to sell RITC to close long
+
+            place_mkt(USD, 'BUY', hedge_cost)  # Hedge the USD transaction cost
+            
+            for i in range(0, unwind_qty, MAX_SIZE_EQUITY):
+                qty = min(MAX_SIZE_EQUITY, unwind_qty - i)
+                resp = place_mkt(RITC, "SELL", qty)
+                avg_price.append(resp['vwap'])
+                unwind_qty -= qty
+
+        # Calculate average price
+        if avg_price:
+            avg_price = sum(avg_price) / len(avg_price)
+        else:
+            avg_price = 0
+
+        # Sort by best (lowest) total_cost for BUY, highest for SELL
+        # if action == 'SELL':
+        #     unwind_options.sort(key=lambda x: x['total_cost'])
+        # else:
+        #     unwind_options.sort(key=lambda x: -x['total_cost'])
+
+        # convert_later = 0
+        # # Execute orders in ranked order until q_left is zero
+        # for opt in unwind_options:
+        #     if q_left <= 0:
+        #         break
+        #     qty = min(opt['qty'], q_left, MAX_SIZE_EQUITY)
+        #     if qty <= 0:
+        #         continue
+        #     if opt['type'] == 'ETF':
+        #         place_mkt(RITC, opt['action'], qty)
+        #         print(f"Unwound {qty} RITC via ETF {opt['action']} at {opt['price']}")
+        #     else:
+        #         # Stocks + converter
+        #         if opt['action'] == 'BUY':
+        #             place_mkt(BULL, 'BUY', qty)
+        #             place_mkt(BEAR, 'BUY', qty)
+        #             print(f"Bought {qty} BULL & BEAR, then converted to RITC (manual step)")
+        #         else:
+        #             print(f"Redeemed {qty} RITC, then selling stocks (manual step)")
+        #             place_mkt(BULL, 'SELL', qty)
+        #             place_mkt(BEAR, 'SELL', qty)
+        
+        #         convert_later += qty
+
+        #     q_left -= qty
+
+
+        # print("[UPDATE] Conversion step pending for the qty", convert_later)
+
+        # if opt['action'] == 'BUY' and convert_later > 0:
+        #     converter.convert_bull_bear(convert_later)
+        #     print(f"Converted {convert_later} BULL and BEAR via converter after buying stocks")
+
+
+        # elif opt['action'] == 'SELL' and convert_later > 0:
+        #     converter.convert_ritc(convert_later)
+        #     print(f"Converted {convert_later} RITC via converter after redeeming RITC")
+
+
+        # print("Unwind complete")
+
+
+def check_tender(converter):
+
+  
+    # Tender handling
+    tenders = get_tenders()
+    unwinding_active = False  # Flag for later
+    for tender in tenders:  # Prioritize by profit? Sort if multiple
+
+        if tender['tender_id'] in tender_ids_eval:
+            continue
+        
+        tender_ids_eval.add(tender['tender_id'])
+
+        eval_result = evaluate_tender_profit(tender, usd, bull, bear, ritc)
+
+        print(f"Evaluated profit : {eval_result}")
+
+        if eval_result['profitable'] > -1000000000:
+            if accept_and_hedge_tender(tender):
+                print(f"Accepted tender ID {tender['tender_id']}, profit {eval_result['profit']:.2f}")
+                unwind_tender_position(tender, eval_result, converter)  # Trigger unwind
+            else:
+                print(f"Failed to accept tender ID {tender['tender_id']}")
+        else:
+            print(f"Rejected tender ID {tender['tender_id']}: Not profitable")
+
+
+
+
+def test_tender_code():
     
-            convert_later += qty
 
-        q_left -= qty
+    # Iterate through all files in the directory
+    for root, _, files in os.walk('output/'):
+        for file in files:
+            # Check if the file has a .pkl or .pickle extension
+            if file.endswith(('.pkl', '.pickle')):
+                file_path = os.path.join(root, file)
+                with open(file_path, 'rb') as f:
+                    data = pickle.load(f)
+                    tender.evaluate_tender_profit(data['tender'], data['usd'], data['bull'], data['bear'], data['ritc'])
 
-
-    print("[UPDATE] Conversion step pending for the qty", convert_later)
-
-    if opt['action'] == 'BUY' and convert_later > 0:
-        converter.convert_bull_bear(convert_later)
-        print(f"Converted {convert_later} BULL and BEAR via converter after buying stocks")
-
-
-    elif opt['action'] == 'SELL' and convert_later > 0:
-        converter.convert_ritc(convert_later)
-        print(f"Converted {convert_later} RITC via converter after redeeming RITC")
-
-
-    print("Unwind complete")
+            

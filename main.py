@@ -31,62 +31,6 @@ and maximize returns.
 
 tender_ids_eval = set() 
 
-
-# --------- SESSION ----------
-s = requests.Session()
-s.headers.update(HDRS)
-
-
-# New evaluation function for Step 2
-
-# --------- CORE LOGIC ----------
-def step_once(converter):
-
-    bull = best_bid_ask_entire_depth(BULL)
-    bear = best_bid_ask_entire_depth(BEAR)
-    ritc  = best_bid_ask_entire_depth(RITC)
-    usd = best_bid_ask_entire_depth(USD)   
-
-    # Tender handling
-    tenders = get_tenders()
-    unwinding_active = False  # Flag for later
-    for tender in tenders:  # Prioritize by profit? Sort if multiple
-
-        if tender['tender_id'] in tender_ids_eval:
-            continue
-        
-        tender_ids_eval.add(tender['tender_id'])
-
-        eval_result = evaluate_tender_profit(tender, usd, bull, bear, ritc)
-
-        print(f"Evaluated profit : {eval_result}")
-
-        if eval_result['profitable'] > -1000000000:
-            if accept_and_hedge_tender(tender):
-                print(f"Accepted tender ID {tender['tender_id']}, profit {eval_result['profit']:.2f}")
-                unwind_tender_position(tender, eval_result, converter)  # Trigger unwind
-            else:
-                print(f"Failed to accept tender ID {tender['tender_id']}")
-        else:
-            print(f"Rejected tender ID {tender['tender_id']}: Not profitable")
-
-
-
-# New unwind function for Step 4
-
-# New FX hedge function
-def hedge_fx(exposure_usd):
-    if exposure_usd == 0:
-        return
-    action = "BUY" if exposure_usd > 0 else "SELL"
-    qty = abs(exposure_usd)  # Adjust units if needed (API may require integers)
-    child_qty = min(MAX_SIZE_FX, qty)
-    while qty > 0:
-        out = place_mkt(USD, action, child_qty)
-        print(out)
-        qty -= child_qty
-    print(f"Hedged FX: {action} {abs(exposure_usd)} USD")
-
 # Example usage in main loop:
 def main():
     # resp = open_leases()
@@ -95,27 +39,10 @@ def main():
     
     while status == "ACTIVE":
         check_conversion_arbitrage(converter)
-        step_once(converter)
+        check_tender(converter)
         sleep(0.5)
         tick, status = get_tick_status()
-
-
-def test_tender_code():
-    
-
-    # Iterate through all files in the directory
-    for root, _, files in os.walk('output/'):
-        for file in files:
-            # Check if the file has a .pkl or .pickle extension
-            if file.endswith(('.pkl', '.pickle')):
-                file_path = os.path.join(root, file)
-                with open(file_path, 'rb') as f:
-                    data = pickle.load(f)
-                    tender.evaluate_tender_profit(data['tender'], data['usd'], data['bull'], data['bear'], data['ritc'])
-
-                    
-
-    
+        
 
 if __name__ == "__main__":
     main()
