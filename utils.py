@@ -104,6 +104,7 @@ def positions_map():
         out.setdefault(k, 0)
     return out
 
+
 def get_position_limits_impact(projected_ritc_change=0, projected_bull_change=0, projected_bear_change=0):
     pos = positions_map()
     gross = abs(pos[BULL] + projected_bull_change) + abs(pos[BEAR] + projected_bear_change) + 2 * abs(pos[RITC] + projected_ritc_change)
@@ -120,7 +121,11 @@ def place_mkt(ticker, action, qty):
     return order.json()
 
 def within_limits():
-    return get_position_limits_impact()
+    # Simple gross/net guard using equity legs only
+    pos = positions_map()
+    gross = abs(pos[BULL]) + abs(pos[BEAR]) + abs(pos[RITC])
+    net   = pos[BULL] + pos[BEAR] + pos[RITC]  # simple net; refine as desired
+    return (gross < MAX_GROSS) and (MAX_SHORT_NET < net < MAX_LONG_NET)
 
 def accept_tender(tender):
     tender_id = tender['tender_id']
@@ -162,6 +167,20 @@ def etf_to_basket_value(etf_price, q):
 def get_leases():
     return s.get(f"{API}/leases")
 
+def hedge_fx(action, qty):
+    """ wrapper for trading within the limits"""
+    base_qty = qty
+    while qty > 0:
+        child_qty = min(MAX_SIZE_FX, qty)
+        place_mkt(USD, action, child_qty)
+        qty -= child_qty
+
+    print(f"Hedged FX: {action} {abs(base_qty)} USD")
+
+
+
+
+
 
 
 class Converter():
@@ -198,8 +217,8 @@ class Converter():
         resp = s.post(endpoint, params = {"from1": "RITC", "quantity1": int(qty_ritc), "from2":"USD", "quantity2": int(1500*qty_ritc // 10000)})
         if not resp.ok:
             print(f"[ERROR] Failed to use ETF-Creation lease: {resp.status_code} {resp.text}")
-            if itr < 3: 
-                sleep(1)
+            if itr < 10: 
+                sleep(1.5)
                 self.convert_ritc(qty_ritc, itr + 1)
 
         return resp
@@ -211,7 +230,7 @@ class Converter():
         resp = s.post(endpoint, params = {"from1": "BULL", "quantity1": int(qty), "from2":"BEAR", "quantity2": int(qty), "from3":"USD", "quantity3": int(1500*qty // 10000)})
         if not resp.ok:
             print(f"[ERROR] Failed to use ETF-Redemption lease: {resp.status_code} {resp.text}")
-            if itr < 3: 
-                sleep(1)
+            if itr < 10: 
+                sleep(1.5)
                 self.convert_bull_bear(qty, itr + 1)
         return resp 

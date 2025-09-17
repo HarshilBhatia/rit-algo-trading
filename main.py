@@ -36,6 +36,8 @@ def main():
     # resp = open_leases()
     tick, status = get_tick_status()
     converter = Converter() # initializes the leases
+    ps = positions_map()
+    print(ps)
     
     while status == "ACTIVE":
         check_conversion_arbitrage(converter)

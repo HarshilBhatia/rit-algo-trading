@@ -120,6 +120,36 @@ class EvaluateTenders():
         return True
 
 
+    def unwind_single_batch_stocks(self):
+        qty = min(MAX_SIZE_EQUITY, self.unwind_stocks)
+
+        if self.action == 'SELL':
+            place_mkt(BULL, 'BUY', qty)
+            place_mkt(BEAR, 'BUY', qty)
+            place_mkt(USD, 'BUY', 2*qty*0.02)  # transaction cost.
+            print(f"Bought {qty} BULL & BEAR")
+        else:
+            place_mkt(BULL, 'SELL', qty)
+            place_mkt(BEAR, 'SELL', qty)
+            place_mkt(USD, 'BUY', 2*qty*0.02)  # transaction cost.
+        
+        self.unwind_stocks -= qty
+
+    def convert_single_batch_etf(self):
+
+        qty = min(MAX_SIZE_EQUITY, self.unwind_conversion)
+
+        if self.action == 'SELL':
+            self.converter.convert_bull_bear(qty) # Convert BULL and BEAR to RITC
+            place_mkt(USD, 'BUY',conversion_cost(qty))  # Hedge conversion cost
+            print(f"[Converted] BB -> RITC")
+        else:
+            self.converter.convert_ritc(qty) # Convert RITC to BULL and BEAR
+            place_mkt(USD, 'BUY',conversion_cost(qty))  # Hedge conversion cost
+            print(f"[Converted] RITC -> BB ")
+            
+        self.unwind_conversion -= qty
+        
 
     def unwind_tender_position(self):
 
@@ -131,11 +161,13 @@ class EvaluateTenders():
         fx_hedge_conv = (self.quantity - self.etf_pos) * self.price  # USD quantity to hedge -- based on stock position.
 
         # ETF unwind (direct)
+
+        # TODO: GROSS LIMIT PROBLEM
         avg_price = []
         if self.action == 'SELL':  # You need to buy back RITC to close short
             # CHUNKS of 10k 
             place_mkt(USD, "BUY", hedge_cost)  # Hedge the USD transaction cost
-            place_mkt(USD, "SELL", fx_hedge_conv)  # Conversion remaining USD Hedge
+            hedge_fx("SELL", fx_hedge_conv)  # Conversion remaining USD Hedge
 
             while unwind_qty > 0:
                 qty = min(MAX_SIZE_EQUITY, unwind_qty)
@@ -147,7 +179,7 @@ class EvaluateTenders():
         else:  # action == 'BUY', you need to sell RITC to close long
 
             place_mkt(USD, "BUY", hedge_cost)  # Hedge the USD transaction cost
-            place_mkt(USD, "BUY", fx_hedge_conv)  # Conversion remaining USD Hedge
+            hedge_fx("BUY", fx_hedge_conv)  # Conversion remaining USD Hedge
             
             while unwind_qty > 0:
                 qty = min(MAX_SIZE_EQUITY, unwind_qty)
@@ -164,26 +196,30 @@ class EvaluateTenders():
             avg_price = 0
 
         # convert_later = 0
-        conv_unwind_qtf = self.stock_pos
-
-       
+        self.unwind_stocks = self.stock_pos
+        self.unwind_conversion = self.stock_pos
         
-        while conv_unwind_qtf > 0:
-            qty = min(MAX_SIZE_EQUITY, conv_unwind_qtf)
 
-            if self.action == 'SELL':
-                place_mkt(BULL, 'BUY', qty)
-                place_mkt(BEAR, 'BUY', qty)
-                place_mkt(USD, 'BUY', 2*qty*0.02)  # transaction cost.
-                print(f"Bought {qty} BULL & BEAR")
-            else:
-                print(f"Redeemed {qty} RITC, then selling stocks")
-                place_mkt(BULL, 'SELL', qty)
-                place_mkt(BEAR, 'SELL', qty)
+        while self.unwind_stocks > 0 or self.unwind_conversion > 0:
 
-                place_mkt(USD, 'BUY', 2*qty*0.02)  # transaction cost.
-            
-            conv_unwind_qtf -= qty
+            qty = min(MAX_SIZE_EQUITY, self.unwind_stocks)
+            flag = 0 
+            if self.action == 'SELL' and get_position_limits_impact(0, +qty, qty): # RITC, BULL, BEAR -- buying Bull and bear.
+                flag = 1
+            if self.action == 'BUY' and get_position_limits_impact(0, -qty, -qty): # RITC, BULL, BEAR -- buying Bull and bear.
+                flag = 1
+        
+            # this is done so that gross limit problems don't occur.
+            if flag: 
+                # convert a batch of stocks -- ETF  
+                self.convert_single_batch_etf()
+            elif self.unwind_stocks > 0:
+                # buy more stocks 
+                self.unwind_single_batch_stocks()
+            elif self.unwind_conversion > 0:
+                
+                self.convert_single_batch_etf() 
+           
 
         # IDEA -- FOR converter -- we don't need to instantly CONVERT right. We can WAIT
         # since all the USD is already hegded. Wait for what? -- wait for the random walk price
@@ -192,26 +228,22 @@ class EvaluateTenders():
         # CAN make this more efficient ^ 
         # Maybe this can also be async / run in background or at every stpe.
 
-        conv_unwind_qtf = self.stock_pos
-        while conv_unwind_qtf > 0:
-            qty = min(MAX_SIZE_EQUITY, conv_unwind_qtf)
+       
 
-            if self.action == 'SELL':
-                self.converter.convert_bull_bear(qty) # Convert BULL and BEAR to RITC
-                place_mkt(USD, 'BUY',conversion_cost(qty))  # Hedge conversion cost
-                print(f"[Converted] BB -> RITC")
-            else:
-                self.converter.convert_ritc(qty) # Convert RITC to BULL and BEAR
-                place_mkt(USD, 'BUY',conversion_cost(qty))  # Hedge conversion cost
-                print(f"[Converted] RITC -> BB ")
-            
-            conv_unwind_qtf -= qty
+        # ADD Logic to sell the USD profits to CAD
+        sleep(2)
+        usd_position = positions_map()[USD]
 
-    
+        # # BOOK Profits into CAD. 
+        if usd_position < 0:
+            place_mkt(USD, "BUY", abs(usd_position))
+        else:
+            place_mkt(USD, "SELL", usd_position)
+
+        print(f"[CONVERTED] {usd_position} USD into CAD")
         # exit()
+
         
-
-
 def check_tender(converter):
 
   
@@ -221,7 +253,6 @@ def check_tender(converter):
     unwinding_active = False  # Flag for later
     for tender in tenders:  # Prioritize by profit? Sort if multiple
 
-
         T = EvaluateTenders(tender, converter) 
         # tender_ids_eval.add(tender['tender_id'])
 
@@ -229,7 +260,7 @@ def check_tender(converter):
 
         print(f"Evaluated profit : {eval_result}")
 
-        if eval_result['profit'] > 1000:
+        if eval_result['profit'] > -1000000:
             if T.accept_and_hedge_tender():
                 print(f"Accepted tender ID {tender['tender_id']}, profit {eval_result['profit']:.2f}")
                 T.unwind_tender_position()  # Trigger unwind
