@@ -117,7 +117,7 @@ def place_mkt(ticker, action, qty):
                   params={"ticker": ticker, "type": "MARKET",
                           "quantity": int(qty), "action": action})
 
-    print(order.json())
+    # print(order.json())
     return order.json()
 
 def within_limits():

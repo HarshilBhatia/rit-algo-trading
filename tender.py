@@ -76,25 +76,31 @@ class EvaluateTenders():
         net_profit = 0
         q_left = self.quantity
 
+        self.etf_avg_price, self.stock_avg_price = 0,0
+
         for p in self.positions:
             if q_left >= p['level_qty']:
                 q_left -= p['level_qty']
                 net_profit += p['level_qty'] * p['profit']
                 if p['type'] == 'STOCK':
                     self.stock_pos += p['level_qty']
+                    self.stock_avg_price = p['level_price'] * p['level_qty'] 
                 elif p['type'] == 'ETF':
+                    self.etf_avg_price = p['level_price'] * p['level_qty'] 
                     self.etf_pos += p['level_qty']
             else:
                 net_profit +=  q_left * p['profit']
                 if p['type'] == 'STOCK':
                     self.stock_pos += q_left
+                    self.stock_avg_price = p['level_price'] * q_left
                 elif p['type'] == 'ETF':
                     self.etf_pos += q_left
+                    self.etf_avg_price = p['level_price'] * q_left
 
                 q_left = 0 
 
-
-        # print(tabulate(self.positions))
+        self.etf_avg_price = self.etf_avg_price / self.etf_pos if self.etf_pos > 0 else 0
+        self.stock_avg_price = self.stock_avg_price / self.stock_pos if self.stock_pos > 0 else 0
 
         print('vanilla profit:', net_profit)
         net_profit -= 0.02*self.etf_pos  + 0.02 * 2 * self.stock_pos# 
@@ -124,13 +130,16 @@ class EvaluateTenders():
         qty = min(MAX_SIZE_EQUITY, self.unwind_stocks)
 
         if self.action == 'SELL':
-            place_mkt(BULL, 'BUY', qty)
-            place_mkt(BEAR, 'BUY', qty)
+            order1 = place_mkt(BULL, 'BUY', qty)
+            order2 = place_mkt(BEAR, 'BUY', qty)
+            self.avg_stock_unwind = (order1['vwap'] + order2['vwap']) * qty
+
             place_mkt(USD, 'BUY', 2*qty*0.02)  # transaction cost.
             print(f"Bought {qty} BULL & BEAR")
         else:
-            place_mkt(BULL, 'SELL', qty)
-            place_mkt(BEAR, 'SELL', qty)
+            order1 = place_mkt(BULL, 'SELL', qty)
+            order2 = place_mkt(BEAR, 'SELL', qty)
+            self.avg_stock_unwind = (order1['vwap'] + order2['vwap']) * qty 
             place_mkt(USD, 'BUY', 2*qty*0.02)  # transaction cost.
         
         self.unwind_stocks -= qty
@@ -162,19 +171,20 @@ class EvaluateTenders():
 
         # ETF unwind (direct)
 
+        print("*********************** [UNWIND] ***********************")
         # TODO: GROSS LIMIT PROBLEM
         avg_price = []
         if self.action == 'SELL':  # You need to buy back RITC to close short
             # CHUNKS of 10k 
-            place_mkt(USD, "BUY", hedge_cost)  # Hedge the USD transaction cost
+            order = place_mkt(USD, "BUY", hedge_cost)  # Hedge the USD transaction cost
             hedge_fx("SELL", fx_hedge_conv)  # Conversion remaining USD Hedge
 
             while unwind_qty > 0:
                 qty = min(MAX_SIZE_EQUITY, unwind_qty)
-                resp = place_mkt(RITC, "BUY", qty)
-                avg_price.append(resp['vwap'])
+                order = place_mkt(RITC, "BUY", qty)
+                avg_price.append(order['vwap'])
+                print(f"[BUY] {qty} at {order['vwap']}")
                 unwind_qty -= qty
-                print(unwind_qty)
 
         else:  # action == 'BUY', you need to sell RITC to close long
 
@@ -183,11 +193,10 @@ class EvaluateTenders():
             
             while unwind_qty > 0:
                 qty = min(MAX_SIZE_EQUITY, unwind_qty)
-                resp = place_mkt(RITC, "SELL", qty)
-                avg_price.append(resp['vwap'])
+                order = place_mkt(RITC, "SELL", qty)
+                avg_price.append(order['vwap'])
+                print(f"[SELL] {qty} at {order['vwap']}")
                 unwind_qty -= qty
-                print(unwind_qty)
-
 
         # Calculate average price
         if avg_price:
@@ -195,10 +204,17 @@ class EvaluateTenders():
         else:
             avg_price = 0
 
+        print("======= STATS -- DIRECT ETF =======")
+        print("Average price:", avg_price)
+        print(f"Estimated Price: {self.etf_avg_price}")
+        print(f"Slippage: {self.etf_avg_price - avg_price} per share")
+        print(f"PnL (from Tender offer): {(self.price - avg_price) * self.etf_pos if self.action == 'SELL' else (avg_price - self.price) * self.etf_pos}")
+        print("===================================")
+
         # convert_later = 0
         self.unwind_stocks = self.stock_pos
         self.unwind_conversion = self.stock_pos
-        
+        self.avg_stock_unwind = 0 
 
         while self.unwind_stocks > 0 or self.unwind_conversion > 0:
 
@@ -217,8 +233,16 @@ class EvaluateTenders():
                 # buy more stocks 
                 self.unwind_single_batch_stocks()
             elif self.unwind_conversion > 0:
-                
                 self.convert_single_batch_etf() 
+
+
+        self.avg_stock_unwind = self.avg_stock_unwind / (self.stock_pos) if self.stock_pos > 0 else 0
+        print("======= STATS -- CONVERSION =======")
+        print("Average price:", self.avg_stock_unwind)
+        print(f"Estimated Price: {self.avg_stock_unwind}")
+        print(f"Slippage: {self.avg_stock_unwind - avg_price} per share")
+        print(f"PnL (from Tender offer): {(self.price - avg_price) * self.etf_pos if self.action == 'SELL' else (avg_price - self.price) * self.etf_pos}")
+        print("===================================")
            
 
         # IDEA -- FOR converter -- we don't need to instantly CONVERT right. We can WAIT
