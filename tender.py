@@ -166,10 +166,7 @@ class EvaluateTenders():
         # convert_later = 0
         conv_unwind_qtf = self.stock_pos
 
-        # IDEA -- FOR converter -- we don't need to instantly CONVERT right. We can WAIT
-        # since all the USD is already hegded. Wait for what? -- wait for the random walk price
-        # to make sense. Can also use this instead of current conversion pnl metric to determine 
-        # if BEAR / BULL are undervalued or overvalued. 
+       
         
         while conv_unwind_qtf > 0:
             qty = min(MAX_SIZE_EQUITY, conv_unwind_qtf)
@@ -187,6 +184,13 @@ class EvaluateTenders():
                 place_mkt(USD, 'BUY', 2*qty*0.02)  # transaction cost.
             
             conv_unwind_qtf -= qty
+
+        # IDEA -- FOR converter -- we don't need to instantly CONVERT right. We can WAIT
+        # since all the USD is already hegded. Wait for what? -- wait for the random walk price
+        # to make sense. Can also use this instead of current conversion pnl metric to determine 
+        # if BEAR / BULL are undervalued or overvalued. 
+        # CAN make this more efficient ^ 
+        # Maybe this can also be async / run in background or at every stpe.
 
         conv_unwind_qtf = self.stock_pos
         while conv_unwind_qtf > 0:
