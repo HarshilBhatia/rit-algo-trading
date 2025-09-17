@@ -31,12 +31,7 @@ class EvaluateTenders():
             usd = best_bid_ask_entire_depth(USD)   
 
 
-
-
-
         ritc_asks , ritc_bids = ritc['asks'], ritc['bids']
-
-
         # i want to compute the direct profit at each bid and ask level. 
 
         if self.action == 'SELL':  # You sell RITC, go short
@@ -53,27 +48,27 @@ class EvaluateTenders():
         bull_asks , bull_bids = bull['asks'], bull['bids']
         bear_asks , bear_bids = bear['asks'], bear['bids']
 
-        # if self.action == 'SELL':
-        #     for level_bull, level_bear in zip(bull_asks, bear_asks):
-        #         q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
-        #         profit = q* (self.price - (level_bull['price'] + level_bear['price'])) - CONVERTER_COST * q / 10000 # this should be per 10000.
-        #         self.positions.append({'type': 'STOCK',
-        #                             'level_price ': level_bull['price'] + level_bear['price'],
-        #                             'level_qty': q,
-        #                             'profit': profit / (q),
-        #                             'profit_with_q': profit})
+        if self.action == 'SELL':
+            for level_bull, level_bear in zip(bull_asks, bear_asks):
+                q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
+                profit = q* (self.price - (level_bull['price'] + level_bear['price'])) - CONVERTER_COST * q / 10000 # this should be per 10000.
+                self.positions.append({'type': 'STOCK',
+                                    'level_price ': level_bull['price'] + level_bear['price'],
+                                    'level_qty': q,
+                                    'profit': profit / (q),
+                                    'profit_with_q': profit})
                 
-        # elif self.action == 'BUY':
-        #     for level_bull, level_bear in zip(bull_bids, bear_bids):
-        #         q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
-        #         # this profit is wrong, doesn't account for usd / cad conversion.
-        #         profit = q* ((level_bull['price'] + level_bear['price'])  - self.price) - CONVERTER_COST # this should be per 10000.
-        #         self.positions.append({
-        #                             'type': 'STOCK',
-        #                             'level_price ': level_bull['price'] + level_bear['price'],
-        #                             'level_qty': q,
-        #                             'profit': profit / (q),
-        #                             'profit_with_q': profit})
+        elif self.action == 'BUY':
+            for level_bull, level_bear in zip(bull_bids, bear_bids):
+                q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
+                # this profit is wrong, doesn't account for usd / cad conversion.
+                profit = q* ((level_bull['price'] + level_bear['price'])  - self.price) - CONVERTER_COST # this should be per 10000.
+                self.positions.append({
+                                    'type': 'STOCK',
+                                    'level_price ': level_bull['price'] + level_bear['price'],
+                                    'level_qty': q,
+                                    'profit': profit / (q),
+                                    'profit_with_q': profit})
 
 
         self.positions.sort(key=lambda x: x['profit'], reverse=True)
@@ -90,10 +85,20 @@ class EvaluateTenders():
                 elif p['type'] == 'ETF':
                     self.etf_pos += p['level_qty']
             else:
-                q_left = 0 
                 net_profit +=  q_left * p['profit']
+                if p['type'] == 'STOCK':
+                    self.stock_pos += q_left
+                elif p['type'] == 'ETF':
+                    self.etf_pos += q_left
 
-        print("Profit:", net_profit, 'etf pos:', self.etf_pos)
+                q_left = 0 
+
+
+        # print(tabulate(self.positions))
+
+        print('vanilla profit:', net_profit)
+        net_profit -= 0.02*self.quantity + conversion_cost(self.stock_pos)
+        print("Profit:", net_profit, 'etf pos:', self.etf_pos, 'stock pos', self.stock_pos)
 
         profitable = net_profit > 0
 
@@ -137,6 +142,7 @@ class EvaluateTenders():
                 resp = place_mkt(RITC, "BUY", qty)
                 avg_price.append(resp['vwap'])
                 unwind_qty -= qty
+                print(unwind_qty)
 
         else:  # action == 'BUY', you need to sell RITC to close long
 
@@ -148,6 +154,8 @@ class EvaluateTenders():
                 resp = place_mkt(RITC, "SELL", qty)
                 avg_price.append(resp['vwap'])
                 unwind_qty -= qty
+                print(unwind_qty)
+
 
         # Calculate average price
         if avg_price:
@@ -178,6 +186,9 @@ class EvaluateTenders():
                 self.converter.convert_ritc(qty) # Convert RITC to BULL and BEAR
             
             conv_unwind_qtf -= qty
+
+    
+        # exit()
         
 
 
