@@ -89,6 +89,18 @@ def evaluate_tender_profit(tender, usd, bull, bear, ritc):
     }
 
 
+def accept_and_hedge_tender(tender):
+    
+    # if buy tender
+    usd_quantity = tender['price'] * tender['quantity']
+    accept_tender(tender)
+    # fx hedge
+    place_mkt(USD, tender['action'], usd_quantity)    
+    # Place the tender order
+    
+    return True
+
+
 def unwind_tender_position(tender, eval_result):
     action = tender['action']
     q_left = tender['quantity']
@@ -192,12 +204,12 @@ def unwind_tender_position(tender, eval_result):
     print("[UPDATE] Conversion step pending for the qty", convert_later)
 
     if opt['action'] == 'BUY' and convert_later > 0:
-        convert_bull_bear(convert_later)
+        Converter.convert_bull_bear(convert_later)
         print(f"Converted {convert_later} BULL and BEAR via converter after buying stocks")
 
 
     elif opt['action'] == 'SELL' and convert_later > 0:
-        convert_ritc(convert_later)
+        Converter.convert_ritc(convert_later)
         print(f"Converted {convert_later} RITC via converter after redeeming RITC")
 
 

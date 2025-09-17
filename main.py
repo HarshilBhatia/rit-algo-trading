@@ -107,6 +107,8 @@ def step_once():
     tenders = get_tenders()
     unwinding_active = False  # Flag for later
     for tender in tenders:  # Prioritize by profit? Sort if multiple
+        print(tender) 
+        exit()
 
         if tender['tender_id'] in tender_ids_eval:
             continue
@@ -120,7 +122,7 @@ def step_once():
 
         q_tender = tender['quantity']
         if eval_result['profitable'] :
-            if accept_tender(tender):
+            if tender.accept_and_hedge_tender(tender):
                 print(f"Accepted tender ID {tender['tender_id']}, profit {eval_result['profit']:.2f}")
                 tender.unwind_tender_position(tender, eval_result)  # Trigger unwind
                 unwinding_active = True
@@ -129,35 +131,7 @@ def step_once():
         else:
             print(f"Rejected tender ID {tender['tender_id']}: Not profitable")
 
-    traded = False
 
-    
-    # check_conversion_arbitrage()
-
-    # if not unwinding_active:  # Proceed with arb if not unwinding
-    #     if edge1 >= ARB_THRESHOLD_CAD and within_limits():
-    #         # Basket rich: sell BULL & BEAR, buy RITC
-    #         q = min(ORDER_QTY, MAX_SIZE_EQUITY)
-    #         place_mkt(BULL, "SELL", q)
-    #         place_mkt(BEAR, "SELL", q)
-    #         place_mkt(RITC, "BUY",  q)
-    #         traded = True
-
-    #     elif edge2 >= ARB_THRESHOLD_CAD and within_limits():
-    #         # ETF rich: buy BULL & BEAR, sell RITC
-    #         q = min(ORDER_QTY, MAX_SIZE_EQUITY)
-    #         place_mkt(BULL, "BUY",  q)
-    #         place_mkt(BEAR, "BUY",  q)
-    #         place_mkt(RITC, "SELL", q)
-    #         traded = True
-
-    # return traded, edge1, edge2, {
-    #     "bull_bid": bull_bid, "bull_ask": bull_ask,
-    #     "bear_bid": bear_bid, "bear_ask": bear_ask,
-    #     "ritc_bid_usd": ritc_bid_usd, "ritc_ask_usd": ritc_ask_usd,
-    #     "usd_bid": usd_bid, "usd_ask": usd_ask,
-    #     "ritc_bid_cad": ritc_bid_cad, "ritc_ask_cad": ritc_ask_cad
-    # }
 
 # New unwind function for Step 4
 
@@ -252,7 +226,8 @@ def test_tender_code():
                 file_path = os.path.join(root, file)
                 with open(file_path, 'rb') as f:
                     data = pickle.load(f)
-                    tenders.evaluate_tender_profit(data['tender'], data['usd'], data['bull'], data['bear'], data['ritc'])
+                    tender.evaluate_tender_profit(data['tender'], data['usd'], data['bull'], data['bear'], data['ritc'])
+                    print(data['tender'])
                     
 
     
@@ -260,7 +235,7 @@ def test_tender_code():
 if __name__ == "__main__":
     # main()
 
-    main()
+    test_tender_code()
 
 
 
