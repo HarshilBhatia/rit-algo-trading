@@ -5,7 +5,7 @@ import time
 class EvaluateTenders():
 
     def __init__(self, tender, converter):
-        self.positions = {} 
+        self.positions = []
         self.stock_pos, self.etf_pos = 0,0 
         self.tender = tender
         self.action = tender['action']
@@ -41,11 +41,11 @@ class EvaluateTenders():
 
         if self.action == 'SELL':  # You sell RITC, go short
             for level in ritc_asks:
-                profit = level['quantity'] * (self.p_tender - level['price'])
+                profit = level['quantity'] * (self.price - level['price'])
                 self.positions.append({'type': 'ETF', 'level_price': level['price'], 'level_qty': level['quantity'], 'profit': profit / level['quantity'],'profit_with_q': profit})
         elif self.action == 'BUY':  # You buy RITC, go long, need to sell at bid levels
             for level in ritc_bids:
-                profit = level['quantity'] * (level['price'] - self.p_tender)
+                profit = level['quantity'] * (level['price'] - self.price)
                 self.positions.append({'type': 'ETF', 'level_price': level['price'], 'level_qty': level['quantity'],  'profit': profit / level['quantity'], 'profit_with_q': profit})
 
 
@@ -67,7 +67,7 @@ class EvaluateTenders():
         #     for level_bull, level_bear in zip(bull_bids, bear_bids):
         #         q = min(level_bull['quantity'], level_bear['quantity']) # incorrect, ideally need to propogate down. 
         #         # this profit is wrong, doesn't account for usd / cad conversion.
-        #         profit = q* ((level_bull['price'] + level_bear['price'])  - self.p_tender) - CONVERTER_COST # this should be per 10000.
+        #         profit = q* ((level_bull['price'] + level_bear['price'])  - self.price) - CONVERTER_COST # this should be per 10000.
         #         self.positions.append({
         #                             'type': 'STOCK',
         #                             'level_price ': level_bull['price'] + level_bear['price'],
@@ -93,7 +93,7 @@ class EvaluateTenders():
                 q_left = 0 
                 net_profit +=  q_left * p['profit']
 
-        print("Profit:", net_profit)
+        print("Profit:", net_profit, 'etf pos:', self.etf_pos)
 
         profitable = net_profit > 0
 
@@ -116,7 +116,7 @@ class EvaluateTenders():
 
 
 
-    def unwind_tender_position(self, converter):
+    def unwind_tender_position(self):
 
         unwind_qty = self.etf_pos
 
@@ -130,22 +130,22 @@ class EvaluateTenders():
         avg_price = []
         if self.action == 'SELL':  # You need to buy back RITC to close short
             # CHUNKS of 10k 
-            place_mkt(USD, 'BUY', hedge_cost)  # Hedge the USD transaction cost
+            place_mkt(USD, "BUY", hedge_cost)  # Hedge the USD transaction cost
 
-            for i in range(0, unwind_qty, MAX_SIZE_EQUITY):
+            for i in range(0, int(unwind_qty), MAX_SIZE_EQUITY):
                 qty = min(MAX_SIZE_EQUITY, unwind_qty - i)
                 resp = place_mkt(RITC, "BUY", qty)
                 avg_price.append(resp['vwap'])
-                unwind_qty -= qty
+                # unwind_qty -= qty
+
         else:  # action == 'BUY', you need to sell RITC to close long
 
-            place_mkt(USD, 'BUY', hedge_cost)  # Hedge the USD transaction cost
+            place_mkt(USD, "SELL", hedge_cost)  # Hedge the USD transaction cost
             
-            for i in range(0, unwind_qty, MAX_SIZE_EQUITY):
+            for i in range(0, int(unwind_qty), MAX_SIZE_EQUITY):
                 qty = min(MAX_SIZE_EQUITY, unwind_qty - i)
                 resp = place_mkt(RITC, "SELL", qty)
                 avg_price.append(resp['vwap'])
-                unwind_qty -= qty
 
         # Calculate average price
         if avg_price:
@@ -230,8 +230,8 @@ def check_tender(converter):
 
 
 
-def test_tender_code():
-    
+# Testing code
+def test_tender_code(converter = None):    
 
     # Iterate through all files in the directory
     for root, _, files in os.walk('output/'):
@@ -241,6 +241,10 @@ def test_tender_code():
                 file_path = os.path.join(root, file)
                 with open(file_path, 'rb') as f:
                     data = pickle.load(f)
-                    tender.evaluate_tender_profit(data['tender'], data['usd'], data['bull'], data['bear'], data['ritc'])
+                    T = EvaluateTenders(data, converter) 
+                    eval_result = T.evaluate_tender_profit()
 
             
+
+if __name__ == '__main__':
+    test_tender_code()
