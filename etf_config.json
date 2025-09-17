@@ -1,0 +1,20 @@
+{
+  "api_key": "PA83Q8EP",
+  "max_gross": 100000,
+  "max_long_net": 30000,
+  "max_short_net": -30000,
+  "arb_threshold": 15.0,
+  "tender_threshold": 100.0,
+  "position_sizing": 0.8,
+  "enable_statistical_arb": true,
+  "enable_aggressive_hedging": true,
+  "cache_duration": 0.5,
+  "arbitrage_cooldown": 1.0,
+  "max_order_size": 10000,
+  "slippage_buffer": 0.01,
+  "liquidity_threshold": 1000,
+  "conversion_batch_size": 10000,
+  "risk_checks_enabled": true,
+  "performance_logging": true,
+  "debug_mode": false
+}
