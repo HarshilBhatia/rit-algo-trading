@@ -142,7 +142,7 @@ def open_leases():
     except Exception as e:
         print(f"[EXCEPTION] Exception in open_leases: {e}")
 
-    print("[SUCCESS] Leases opened")
+    # print("[SUCCESS] Leases opened")
 
 
 
@@ -197,7 +197,7 @@ class Converter():
         endpoint = f"{API}/leases/{self.redemption_id}"
         resp = s.post(endpoint, params = {"from1": "RITC", "quantity1": int(qty_ritc), "from2":"USD", "quantity2": int(1500*qty_ritc // 10000)})
         if not resp.ok:
-            print(f"[ERROR] Failed to open ETF-Creation lease: {resp.status_code} {resp.text}")
+            print(f"[ERROR] Failed to use ETF-Creation lease: {resp.status_code} {resp.text}")
 
         return resp
 
@@ -206,6 +206,6 @@ class Converter():
         endpoint = f"{API}/leases/{self.creation_id}"
         resp = s.post(endpoint, params = {"from1": "BULL", "quantity1": int(qty), "from2":"BEAR", "quantity2": int(qty), "from3":"USD", "quantity3": int(1500*qty // 10000)})
         if not resp.ok:
-            print(f"[ERROR] Failed to open ETF-Redemption lease: {resp.status_code} {resp.text}")
+            print(f"[ERROR] Failed to use ETF-Redemption lease: {resp.status_code} {resp.text}")
         
         return resp 

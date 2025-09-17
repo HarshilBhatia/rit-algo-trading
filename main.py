@@ -235,8 +235,6 @@ def main():
     tick, status = get_tick_status()
     converter = Converter() # initializes the leases
     
-    resp = get_leases()
-    print(resp.json())
     while status == "ACTIVE":
         check_conversion_arbitrage(converter)
         sleep(0.5)
