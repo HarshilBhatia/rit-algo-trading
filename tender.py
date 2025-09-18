@@ -242,23 +242,24 @@ class EvaluateTenders():
             # this is done so that gross limit problems don't occur.
             if flag: 
                 # convert a batch of stocks -- ETF  
+                print('FLAG converting ETF.')
                 self.convert_single_batch_etf()
             elif self.unwind_stocks > 0:
                 # buy more stocks 
                 self.unwind_single_batch_stocks()
             elif self.unwind_conversion > 0:
+                print("Normal converting ETF")
                 self.convert_single_batch_etf() 
 
 
         self.avg_stock_unwind = self.avg_stock_unwind / (self.stock_pos) if self.stock_pos > 0 else 0
        
        
-        
         print("======= STATS -- DIRECT ETF =======")
-        print("Average price:", self.avg_etf_unwind)
+        print("Average price:", self.etf_avg_unwind)
         print(f"Estimated Price: {self.etf_avg_price}")
-        print(f"Slippage: {self.etf_avg_price - self.avg_etf_unwind} per share")
-        print(f"PnL (from Tender offer): {(self.price - self.avg_etf_unwind) * self.etf_pos if self.action == 'SELL' else (avg_price - self.price) * self.etf_pos}")
+        print(f"Slippage: {self.etf_avg_price - self.etf_avg_unwind} per share")
+        print(f"PnL (from Tender offer): {(self.price - self.etf_avg_unwind) * self.etf_pos if self.action == 'SELL' else (avg_price - self.price) * self.etf_pos}")
         print("===================================")
 
        
@@ -309,7 +310,7 @@ def check_tender(converter):
 
         print(f"Evaluated profit : {eval_result}")
 
-        if eval_result['profit'] > -1000000:
+        if eval_result['profit'] > -100000:
             if T.accept_and_hedge_tender():
                 print(f"Accepted tender ID {tender['tender_id']}, profit {eval_result['profit']:.2f}")
                 T.unwind_tender_position()  # Trigger unwind

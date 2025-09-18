@@ -218,6 +218,10 @@ class Converter():
         
     def convert_ritc(self,qty_ritc, itr = 0):
 
+
+        if qty == 0:
+            return None
+            
         endpoint = f"{API}/leases/{self.redemption_id}"
         resp = s.post(endpoint, params = {"from1": "RITC", "quantity1": int(qty_ritc), "from2":"USD", "quantity2": int(1500*qty_ritc // 10000)})
         if not resp.ok:
@@ -231,6 +235,8 @@ class Converter():
     def convert_bull_bear(self, qty, itr = 0):
 
         
+        if qty == 0:
+            return None
         endpoint = f"{API}/leases/{self.creation_id}"
         resp = s.post(endpoint, params = {"from1": "BULL", "quantity1": int(qty), "from2":"BEAR", "quantity2": int(qty), "from3":"USD", "quantity3": int(1500*qty // 10000)})
         if not resp.ok:
