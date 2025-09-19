@@ -80,6 +80,24 @@ def best_bid_ask(ticker):
     
     return bid, ask, bid_depth, ask_depth
 
+
+def get_top_level_price_and_qty(ticker, action):
+    """
+    Returns the price and quantity at the top of the book for the given action.
+    For 'SELL', returns best bid; for 'BUY', returns best ask.
+    """
+    book = best_bid_ask_entire_depth(ticker)
+    if action == 'SELL':
+        levels = book['bids']
+    else:
+        levels = book['asks']
+    if not levels:
+        return None, 0
+    top = levels[0]
+    return top['price'], top['quantity']
+# ...existing code...
+
+
 def best_bid_ask_entire_depth(ticker):
     r = s.get(f"{API}/securities/book", params={"ticker": ticker})
     r.raise_for_status()
@@ -344,6 +362,10 @@ class Converter():
         return resp
 
 
+
+
+# def _conversion_fee(self, qty):
+#     return 1500 * (qty / CONVERTER_BATCH)
 
 if __name__ == '__main__':
     print(get_position_limits_impact(85000))
