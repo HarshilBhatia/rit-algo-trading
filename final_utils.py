@@ -97,7 +97,6 @@ def get_top_level_price_and_qty(ticker, action):
         return None, 0
     top = levels[0]
     return top['price'], top['quantity']
-# ...existing code...
 
 
 def best_bid_ask_entire_depth(ticker):

@@ -4,6 +4,8 @@ import time
 from rich import print
 import numpy as np
 
+MIN_CHUNK = 5000
+
 class EvaluateTendersNew():
     def __init__(self, tender, converter):
         self.tender = tender
@@ -47,7 +49,8 @@ class EvaluateTendersNew():
         
         executed, total_profit, = 0, 0
         for opp in self.opportunities:
-            if executed >= self.quantity or opp['profit_per_share'] <= 0: break
+            if executed >= self.quantity: break
+
             take = min(self.quantity - executed, opp['quantity'])
             total_profit += take * opp['profit_per_share']
             executed += take 
@@ -89,49 +92,50 @@ class EvaluateTendersNew():
 
     # ==============================================================================
     # == NEW ADAPTIVE UNWINDING LOGIC (REPLACES ALL OLD EXECUTION METHODS)
-    # ==============================================================================
-    def calculate_direct_cost(self):
-        """Calculate cost of direct ETF trading"""
-        usd_bid, usd_ask, _, _ = best_bid_ask(USD)
-        if self.action == 'SELL':
-            # We're short RITC, need to buy RITC directly
-            ritc_ask_price, qty = get_top_level_price_and_qty(RITC, "BUY")
-            etf_cost_usd = ritc_ask_price * qty + qty * FEE_MKT
-            fx_cost_cad = etf_cost_usd * usd_ask  # Need to buy USD at ask
-            # print("direct_p", ritc_ask_price, end = ' ')
+    # # ==============================================================================
+    # def calculate_direct_cost(self):
+    #     """Calculate cost of direct ETF trading"""
+    #     usd_bid, usd_ask, _, _ = best_bid_ask(USD)
+    #     if self.action == 'SELL':
+    #         # We're short RITC, need to buy RITC directly
+    #         ritc_ask_price, qty = get_top_level_price_and_qty(RITC, "BUY")
+    #         etf_cost_usd = ritc_ask_price * qty + qty * FEE_MKT
+    #         fx_cost_cad = etf_cost_usd * usd_ask  # Need to buy USD at ask
+    #         # print("direct_p", ritc_ask_price, end = ' ')
 
-            return fx_cost_cad / qty
-        else:
-            ritc_bid_price, qty = get_top_level_price_and_qty(RITC, "SELL")
-            etf_revenue_usd = ritc_bid_price * qty - qty * FEE_MKT
-            fx_revenue_cad = etf_revenue_usd * usd_bid  # Sell USD at bid
-            # print("direct_p", ritc_bid_price, end = ' ')
+    #         return fx_cost_cad / qty
+    #     else:
+    #         ritc_bid_price, qty = get_top_level_price_and_qty(RITC, "SELL")
+    #         etf_revenue_usd = ritc_bid_price * qty - qty * FEE_MKT
+    #         fx_revenue_cad = etf_revenue_usd * usd_bid  # Sell USD at bid
+    #         # print("direct_p", ritc_bid_price, end = ' ')
 
-            return -fx_revenue_cad / qty  # Negative because it's revenue
+            # return -fx_revenue_cad / qty  # Negative because it's revenue
 
-    def calculate_converter_cost(self):
-        """Calculate cost of converter method with proportional pricing"""
-        usd_bid, usd_ask, _, _ = best_bid_ask(USD)
-        if self.action == 'SELL':
-            # We're short RITC: Buy stocks → Convert to RITC
-            bull_ask_price, qty_bull = get_top_level_price_and_qty(BULL, "BUY")
-            bear_ask_price, qty_bear = get_top_level_price_and_qty(BEAR, "BUY")
-            qty = min(qty_bull, qty_bear)
-            stock_cost_cad = (bull_ask_price + bear_ask_price) * qty + qty * 2 * FEE_MKT
-            conversion_fee_cad = conversion_cost(qty)
-            # print("c_p", bull_ask_price, bear_ask_price)
+    # def calculate_converter_cost(self):
+    #     """Calculate cost of converter method with proportional pricing"""
+    #     usd_bid, usd_ask, _, _ = best_bid_ask(USD)
+    #     if self.action == 'SELL':
+    #         # We're short RITC: Buy stocks → Convert to RITC
+    #         bull_ask_price, qty_bull = get_top_level_price_and_qty(BULL, "BUY")
+    #         bear_ask_price, qty_bear = get_top_level_price_and_qty(BEAR, "BUY")
+    #         qty = min(qty_bull, qty_bear)
+    #         stock_cost_cad = (bull_ask_price + bear_ask_price) * qty + qty * 2 * FEE_MKT
+    #         conversion_fee_cad = conversion_cost(qty)
+    #         # print("c_p", bull_ask_price, bear_ask_price)
 
-            return (stock_cost_cad + conversion_fee_cad)/ qty
-        else:
-            # We're long RITC: Convert RITC → Sell stocks
-            bull_bid_price, qty_bull = get_top_level_price_and_qty(BULL, "SELL")
-            bear_bid_price, qty_bear = get_top_level_price_and_qty(BEAR, "SELL")
-            qty = min(qty_bull, qty_bear)
-            # print("c_p", bull_bid_price, bear_bid_price)
+    #         return (stock_cost_cad + conversion_fee_cad)/ qty
+    #     else:
+    #         # We're long RITC: Convert RITC → Sell stocks
+    #         bull_bid_price, qty_bull = get_top_level_price_and_qty(BULL, "SELL")
+    #         bear_bid_price, qty_bear = get_top_level_price_and_qty(BEAR, "SELL")
+    #         qty = min(qty_bull, qty_bear)
+    #         # print("c_p", bull_bid_price, bear_bid_price)
 
-            stock_revenue_cad = (bull_bid_price + bear_bid_price) * qty - qty * 2 * FEE_MKT
-            conversion_fee_cad = conversion_cost(qty)
-            return (conversion_fee_cad - stock_revenue_cad)/qty# Net cost
+    #         stock_revenue_cad = (bull_bid_price + bear_bid_price) * qty - qty * 2 * FEE_MKT
+    #         conversion_fee_cad = conversion_cost(qty)
+            # return (conversion_fee_cad - stock_revenue_cad)/qty# Net cost
+
 
     def unwind_tender(self):
         """
@@ -141,95 +145,20 @@ class EvaluateTendersNew():
         print(f"\n*********************** [STARTING ADAPTIVE UNWIND] ***********************")
         
         remaining_qty = self.quantity
-        qty = self.price * self.quantity
-        # if self.action == 'SELL':
-        #     # print('[USD HEDGE]: Buying', qty)
-        #     fx_hedge('SELL', self.price * self.quantity)
-        # else:
-        #     # print('[USD HEDGE]: Selling', qty)
-        #     fx_hedge('BUY', self.price * self.quantity)
-
-
+    
         side = "BUY" if self.action == 'SELL' else "SELL"
         
-        MIN_CHUNK = 5000
 
         while remaining_qty > 0:
             
-            
-            self.cost_eval_st = time.time()
-            direct_cost = self.calculate_direct_cost()
-            converter_cost = self.calculate_converter_cost()
-            usd_ask, _ = get_top_level_price_and_qty(USD, "BUY")
-
-            print(f"[COST] ETF=${direct_cost:.4f} CAD vs CONV=${converter_cost:.4f} CAD BUY_PRICE=${(self.price * usd_ask):.4f}-----", end = ' ')
-
-
-            # trying to avoid squaring at a loss -- wait for some reversion?
-
-            def check_loss(cost, buffer = 0):
-                if self.action == "SELL":
-                    if cost >  self.price * usd_ask + buffer : # buying at loss
-                        return 1
-                else:
-                    if abs(cost) < self.price * usd_ask - buffer:  # selling at loss.
-                        return 1 
-                return 0 
-
-            # st_time = time.time()
-            # output = check_loss(min(direct_cost, converter_cost)) 
-            # while output and time.time() - st_time < 5:
-            #     direct_cost = self.calculate_direct_cost()
-            #     converter_cost = self.calculate_converter_cost()
-            #     output = check_loss(min(direct_cost, converter_cost))
-        
-            # print('delayed for', time.time() - st_time)
-
-            # 3. ACT: Execute the best option
-            if direct_cost <= converter_cost:
-                _, direct_chunk = get_top_level_price_and_qty(RITC, "BUY")
-                direct_chunk = max(direct_chunk, MIN_CHUNK)
-                qty_to_execute = min(direct_chunk, remaining_qty, MAX_SIZE_EQUITY)
-                
-                print(f"ETF for {qty_to_execute} shares.")
-                filled_qty, vwap = self._execute_passive_aggressive_slice(RITC, side, qty_to_execute)
-
-            else:
-                _, qty_bull = get_top_level_price_and_qty(BULL, "BUY")
-                _, qty_bear = get_top_level_price_and_qty(BEAR, "BUY")
-                converter_chunk = max(min(qty_bull,qty_bear), MIN_CHUNK)
-
-                converter_chunk = min(converter_chunk, MAX_SIZE_EQUITY, remaining_qty)
-                
-                qty_to_execute = min(converter_chunk, remaining_qty, MAX_SIZE_EQUITY)
-   
-                print(f"CONV for {qty_to_execute} shares.")
-                # Execute both legs of the converter
-                bull_filled, _ = self._execute_passive_aggressive_slice(BULL, side, qty_to_execute)
-                bear_filled, _ = self._execute_passive_aggressive_slice(BEAR, side, qty_to_execute)
-                
-                # We can only convert the minimum quantity that was successfully filled for both
-                filled_qty = min(bull_filled, bear_filled)
-
-                if filled_qty > 0:
-                    if side == 'BUY': 
-                        self.converter.convert_bull_bear(filled_qty)
-                    else: 
-                        self.converter.convert_ritc(filled_qty)
-
-                    if filled_qty > 0:
-                        
-                        usd_amount_transacted = self.price * filled_qty # selling with original price in mind 
-                        hedge_action = "BUY" if side == "SELL" else "SELL" # If we bought RITC (USD), we must buy USD to pay
-                        fx_hedge(hedge_action, usd_amount_transacted)
-                        fx_hedge("BUY", conversion_cost(filled_qty))
-                    
-                    # print(f"✓ Dyn
-                    print(f"Converted {filled_qty} shares.")
-
+            filled_qty, vwap = self._execute_direct(side, remaining_qty)
             remaining_qty -= filled_qty
+
+            filled_qty, vwap = self._execute_converted(side, remaining_qty)
+            remaining_qty -= filled_qty
+            
             if remaining_qty > 0 and filled_qty > 0:
-                delay = 2 # Replace with your intelligent delay if desired
+                delay = 0 # Replace with your intelligent delay if desired
                 print(f"--- {remaining_qty} shares remaining. Waiting {delay:.1f}s... ---")
                 time.sleep(delay)
 
@@ -241,7 +170,7 @@ class EvaluateTendersNew():
         return True
 
 
-    def _execute_passive_aggressive_slice(self, security, side, quantity):
+    def _execute_direct(self, side, remaining_qty):
         """
         Executes a single slice using the Patient Aggressor strategy.
         MODIFIED: Now returns (quantity_filled, vwap) for hedging purposes.
@@ -251,45 +180,65 @@ class EvaluateTendersNew():
         # Initial state
         total_filled_qty = 0
         total_filled_value = 0
-        remaining_qty = int(quantity)
+
+        # size of the top chunk.
+        usd_bid, usd_ask, _, _ = best_bid_ask(USD)
+        book, qty = get_top_level_price_and_qty(RITC, side)
 
         # 1. Passive Attempt
-        DELTA = 0.2  # Amount to adjust price by (tune as needed)
-        book = best_bid_ask_entire_depth(security)
-        print("time delay in orders", time.time() - self.cost_eval_st)
-        if side == 'BUY':
-            book_side_key = 'asks' 
-            DELTA = -DELTA
-        else:
-            book_side_key = 'bids'
+        _d = 0.1  # Amount to adjust price by (tune as needed)
 
-        if book[book_side_key]:
-            target_price = book[book_side_key][0]['price'] + DELTA
-            print(f"[LMT] @ {target_price:.2f}...", end = ' ')
-            print()
-            limit_order = place_limit(security, side, remaining_qty, target_price)
-            if limit_order:
-                time.sleep(self.PATIENCE_WINDOW_SECONDS)
-                status = get_order_status(limit_order['order_id']).json()
-                
-                if status and status.get('quantity_filled', 0) > 0:
-                    filled = status['quantity_filled']
-                    vwap = status['vwap']
-                    total_filled_qty += filled
-                    total_filled_value += filled * vwap
-                    remaining_qty -= filled
-                    print(f"FILL: {filled} shares.")
-                
-                # Clean up the outstanding passive order regardless of fill
-                cancel_order(limit_order['order_id'])
+        DELTA = _d if side == 'SELL' else -_d
+        def check_loss(cost, buffer = 0):
+            if self.action == "SELL":
+                if cost >  self.price - buffer : # buying at loss
+                    return 1
+            else:
+                if abs(cost) < self.price + buffer:  # selling at loss.
+                    return 1 
+            return 0 
+        
+        st_time = time.time()
+        
+        buffer = 0
+        output = check_loss(book, buffer = buffer)
+        while output and time.time() - st_time < 5:
+            book, qty = get_top_level_price_and_qty(RITC, side)
+            output = check_loss(book, buffer = buffer)
+        
+        print('delayed for', time.time() - st_time)  
+
+        qty = max(qty, MIN_CHUNK)
+        qty = min(qty, remaining_qty, MAX_SIZE_EQUITY)
+
+        
+        target_price = book + DELTA
+        print(f"[LMT] @ {target_price:.2f}...", end = ' ')
+
+        limit_order = place_limit(RITC, side, qty, target_price)
+
+        if limit_order:
+            time.sleep(self.PATIENCE_WINDOW_SECONDS)
+            status = get_order_status(limit_order['order_id']).json()
+            
+            if status and status.get('quantity_filled', 0) > 0:
+                filled = status['quantity_filled']
+                vwap = status['vwap']
+                total_filled_qty += filled
+                total_filled_value += filled * vwap
+                qty -= filled
+                print(f"FILL: {filled} shares.")
+            
+            # Clean up the outstanding passive order regardless of fill
+            cancel_order(limit_order['order_id'])
 
 
         # 2. Aggressive Completion
         self.num_limit_order += 1 
-        if remaining_qty > 0:
+        if qty > 0:
             self.num_limit_order -= 1 
 
-            market_order = place_mkt(security, side, remaining_qty)
+            market_order = place_mkt(RITC, side, qty)
             if market_order and market_order.get('quantity_filled', 0) > 0:
                 filled = market_order['quantity_filled']
                 vwap = market_order['vwap']
@@ -300,12 +249,123 @@ class EvaluateTendersNew():
         
         final_vwap = total_filled_value / total_filled_qty if total_filled_qty > 0 else 0
 
-        if total_filled_qty != quantity: 
-            print(f"[ERROR] haven't filled all quantity")
         print(f"[FINAL] {total_filled_qty} @ price {final_vwap:.4f}")
+
         return total_filled_qty, final_vwap
     
 
+    
+    def _execute_converted(self, side, remaining_qty):
+        """
+        
+        """
+        
+        self.total_orders += 1
+
+        # size of the top chunk.
+        usd_bid, usd_ask, _, _ = best_bid_ask(USD)
+        book_bull, qty_bl = get_top_level_price_and_qty(BULL, side)
+        book_bear, qty_br = get_top_level_price_and_qty(BEAR, side)
+
+        # 1. Passive Attempt
+        _d = 0.1  # Amount to adjust price by (tune as needed)
+        DELTA = _d if side == 'SELL' else -_d
+
+
+        def check_loss(book_bull, book_bear, buffer = 0):
+
+            cost = book_bull + book_bear + conversion_cost(1)
+            if self.action == "SELL":
+                if cost >  self.price * usd_ask - buffer : # buying at loss
+                    return 1
+            else:
+                if abs(cost) < self.price * usd_ask + buffer:  # selling at loss.
+                    return 1 
+            return 0 
+        
+        
+        st_time = time.time()
+
+        buffer = 0
+        
+        output = check_loss(book_bull, book_bear, buffer=buffer)
+        while output and time.time() - st_time < 5:
+            book_bull, qty_bl = get_top_level_price_and_qty(BULL, side)
+            book_bear, qty_br = get_top_level_price_and_qty(BEAR, side)
+            output = check_loss(book_bull, book_bear, buffer = buffer)
+
+        print('delayed for', time.time() - st_time)     
+
+        qty = max(min(qty_bl, qty_br), MIN_CHUNK)
+        order_qty = min(qty, remaining_qty, MAX_SIZE_EQUITY)   
+
+
+        bull_target = book_bull + DELTA        
+        limit_order_bull = place_limit(BULL, side, order_qty,  bull_target)
+        print(f"[LMT] @ {bull_target:.2f}...", end = ' ')
+
+        bear_target = book_bear + DELTA        
+        limit_order_bear = place_limit(BEAR, side, order_qty, bear_target)
+        print(f"[LMT] @ {bear_target:.2f}...", end = ' ')
+
+
+        time.sleep(self.PATIENCE_WINDOW_SECONDS)
+
+        def sq_limit_order(ticker, limit_order, _qty):
+            total_filled_value, total_filled_qty = 0, 0
+
+            if limit_order and "order_id" in limit_order:
+                status = get_order_status(limit_order['order_id']).json()
+                
+                if status and status.get('quantity_filled', 0) > 0:
+                    filled = status['quantity_filled']
+                    vwap = status['vwap']
+                    total_filled_value += filled * vwap
+                    total_filled_qty += filled
+
+                    _qty -= filled
+                    print(f"FILL: {filled} shares.")
+                
+                # Clean up the outstanding passive order regardless of fill
+                cancel_order(limit_order['order_id'])
+
+            # 2. Aggressive Completion
+            self.num_limit_order += 1 
+            if _qty > 0:
+                self.num_limit_order -= 1 
+
+                market_order = place_mkt(ticker, side, _qty)
+                if market_order and market_order.get('quantity_filled', 0) > 0:
+                    filled = market_order['quantity_filled']
+                    vwap = market_order['vwap']
+                    total_filled_qty += filled
+                    total_filled_value += filled * vwap
+                    print(f"[MKR] FILL: {filled} shares @ {vwap}")
+        
+            final_vwap = total_filled_value / total_filled_qty if total_filled_qty > 0 else 0
+            print(f"[FINAL] {total_filled_qty} @ price {final_vwap:.4f}")
+            return total_filled_qty, final_vwap
+
+        bear_qty, _ = sq_limit_order(BEAR, limit_order_bear, order_qty)
+        bull_qty, _ = sq_limit_order(BULL, limit_order_bull, order_qty)
+
+        if bear_qty != bull_qty: 
+            print("[red] [WARNING] different bull / bear filled qty!")
+        
+        hedge_action = "BUY" if side == "SELL" else "SELL" # If we bought RITC (USD), we must buy USD to pay
+        usd_amount_transacted = self.price * order_qty # selling with original price in mind 
+        fx_hedge(hedge_action, usd_amount_transacted)
+
+        if order_qty > 0:
+            if side == 'BUY': 
+                self.converter.convert_bull_bear(order_qty)
+            else: 
+                self.converter.convert_ritc(order_qty)
+
+            fx_hedge("BUY", conversion_cost(order_qty))
+                    
+        return order_qty, _
+    
     def cleanup_fx_exposure(self):
         """Flattens the final USD position, effectively repatriating PnL."""
         time.sleep(1)
@@ -338,7 +398,7 @@ def check_tender(converter):
 
         # print('estimated profit:', eval_result)
         
-        if eval_result > 1000:
+        if eval_result > 0:
             print(f"[green] tender {tender['tender_id']}: profit {eval_result} CAD")
             success = accept_tender(tender)
             if success:
@@ -351,29 +411,27 @@ def check_tender(converter):
             else:
                 print(f"⚠ Partially processed tender {tender['tender_id']}")
                 
-            # Pause between tenders for safety
-            sleep(2)
         else:
-            print(f"[orange] Rejecting tender {tender['tender_id']}: insufficient profit")
+            print(f"[orange] Rejecting tender {tender['tender_id']}: insufficient profit {eval_result}")
 
 
 # DEBUGGING: Test the fixed converter cost calculation
-def test_fixed_converter_cost():
-    """Test the corrected converter cost calculation"""
-    print("\n=== TESTING FIXED CONVERTER COST ===")
+# def test_fixed_converter_cost():
+#     """Test the corrected converter cost calculation"""
+#     print("\n=== TESTING FIXED CONVERTER COST ===")
     
-    # Mock tender for testing
-    mock_tender = {
-        'tender_id': 'TEST',
-        'action': 'BUY', 
-        'price': 24.0,
-        'quantity': 5000
-    }
+#     # Mock tender for testing
+#     mock_tender = {
+#         'tender_id': 'TEST',
+#         'action': 'BUY', 
+#         'price': 24.0,
+#         'quantity': 5000
+#     }
     
-    T = EvaluateTenders(mock_tender, None)
+#     T = EvaluateTenders(mock_tender, None)
     
-    test_quantities = [1000, 2500, 5000, 7500, 10000, 15000]
+#     test_quantities = [1000, 2500, 5000, 7500, 10000, 15000]
     
-    for qty in test_quantities:
-        cost = T.calculate_converter_cost(qty)
-        expected_conversion_fee = 1500 * (qty / 10000) if qty <= 10000 else float('inf')
+#     for qty in test_quantities:
+#         cost = T.calculate_converter_cost(qty)
+#         expected_conversion_fee = 1500 * (qty / 10000) if qty <= 10000 else float('inf')
