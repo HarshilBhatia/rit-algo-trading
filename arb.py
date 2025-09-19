@@ -4,7 +4,8 @@ import numpy as np
 
 class StatArbTrader:
     def __init__(self):
-        self.positions = []
+        # self.positions = []
+        self.positions = None
         self.dev_window = 30
         self.recent_devs = []
         self.max_size = 1000
@@ -25,12 +26,12 @@ class StatArbTrader:
         # Short spread: short ETF (pay ask), long basket (buy at bid)
         etf_cad_short = ritc_ask * usd_ask
         basket_cad_short = bull_bid + bear_bid
-        spread_short = np.log(etf_cad_short / basket_cad_short)
+        spread_short = etf_cad_short - basket_cad_short
 
         # Long spread: long ETF (sell at bid), short basket (sell at ask)
         etf_cad_long = ritc_bid * usd_bid
         basket_cad_long = bull_ask + bear_ask
-        spread_long = np.log(etf_cad_long / basket_cad_long)
+        spread_long = etf_cad_long - basket_cad_long
 
         return {
             'spread_short': spread_short,
@@ -82,7 +83,9 @@ class StatArbTrader:
                 'entry_time': time.time(),
                 'entry_trades': entry_trades
             }
-            self.positions.append(position)
+            print(entry_trades)
+
+            self.positions = position
             print(f"StatArb: {direction} {size} shares")
             return True
         except Exception as e:
@@ -93,14 +96,20 @@ class StatArbTrader:
         holding_time = time.time() - pos['entry_time']
         if pos['direction'] == "SHORT":
             current_spread = data['spread_short']
+           
             if current_spread <= mean_short + std_short:
+                print(f"[SELLING SHORT] {mean_short} {std_short}", current_spread)
                 return True, "mean_reversion"
         else:
             current_spread = data['spread_long']
+
             if current_spread >= mean_long - std_long:
+                print(f"[SELLING long] {mean_long} {std_long}", current_spread)
                 return True, "mean_reversion"
+
         if holding_time > self.max_hold_time:
             return True, "time"
+
         return False, None
 
     def exit_position(self, pos, direction):
@@ -123,6 +132,8 @@ class StatArbTrader:
                 bear = place_mkt(BEAR, "BUY", size)
                 if not (usd and bull and bear): return False
                 exit_trades = {'etf': etf, 'usd': usd, 'bull': bull, 'bear': bear}
+            
+            print(exit_trades)
             pos['exit_trades'] = exit_trades
             return True
         except Exception as e:
@@ -159,7 +170,9 @@ class StatArbTrader:
             return
 
         # Manage existing positions
-        for pos in self.positions[:]:
+        # for pos in self.positions[:]:
+        if self.positions:
+            pos = self.positions
             should_exit, reason = self.should_exit(pos, data, mean_short, std_short, mean_long, std_long)
             if should_exit:
                 direction = pos['direction']
@@ -169,11 +182,16 @@ class StatArbTrader:
                     self.pnl += pnl
                     self.closed_trades.append({'pnl': pnl, 'reason': reason, 'hold': holding_time})
                     print(f"StatArb: CLOSED {direction} after {holding_time}s ({reason}) | PnL: {pnl:.2f} | Total: {self.pnl:.2f}")
-                    self.positions.remove(pos)
+                    self.positions = None
 
         # Enter new position if none active
-        if len(self.positions) == 0:
+        # if len(self.positions) == 0:
+        if not self.positions:
             size = 5000  # or self.max_size
+            
             if data['spread_short'] >= mean_short + 2 * std_short:
+                print(f"[SHORT] sprea{mean_short} {std_short}", data['spread_short'])
                 self.enter_position(size, "SHORT")
             elif data['spread_long'] <= mean_long - 2 * std_long:
+                print(f"[LONG] {mean_long} {std_long}", data['spread_short'])
+                self.enter_position(size, "LONG")

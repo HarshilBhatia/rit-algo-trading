@@ -37,8 +37,8 @@ def main():
     
     tick, status = get_tick_status()
     
-    # arb = StatArbTrader()
-    arb = ETFArbitrageTrader()
+    arb = StatArbTrader()
+    # arb = ETFArbitrageTrader()
     while status == "ACTIVE" and consecutive_errors < max_consecutive_errors:
         loop_count += 1
         current_time = time.time()
