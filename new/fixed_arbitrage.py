@@ -243,6 +243,8 @@ def execute_redeem_etf_arbitrage_fixed(converter, q, expected_profit):
         print(f"[ERROR] Redeem ETF arbitrage failed: {e}")
         return False
 
+
+
 def statistical_arbitrage_fixed():
     """FIXED: Statistical arbitrage without converter, focusing on price relationships"""
     try:

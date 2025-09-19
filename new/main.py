@@ -193,35 +193,38 @@ def main_fixed():
     while status == "ACTIVE" and consecutive_errors < max_consecutive_errors:
         loop_count += 1
         current_time = time.time()
+        check_tender(converter)
+        tick, status = get_tick_status()
+        sleep(0.5)
         
-        try:
+        # try:
             # Periodic health check
-            if current_time - last_health_check > 60:  # Every minute
-                if not comprehensive_health_check():
-                    print("[WARNING] Health check failed")
-                    consecutive_errors += 1
-                    sleep(5)
-                    continue
-                else:
-                    consecutive_errors = 0  # Reset error counter on success
-                last_health_check = current_time
+            # if current_time - last_health_check > 60:  # Every minute
+            #     if not comprehensive_health_check():
+            #         print("[WARNING] Health check failed")
+            #         consecutive_errors += 1
+            #         sleep(5)
+            #         continue
+            #     else:
+            #         consecutive_errors = 0  # Reset error counter on success
+            #     last_health_check = current_time
             
-            # Enhanced position monitoring 
-            positions_status = enhanced_position_monitoring()
+            # # Enhanced position monitoring 
+            # positions_status = enhanced_position_monitoring()
             
-            # Emergency position management
-            if not positions_status['within_limits']:
-                print("[ALERT] Position limits exceeded!")
-                emergency_position_flatten()
-                sleep(2)
-                tick, status = get_tick_status()
-                continue
+            # # Emergency position management
+            # if not positions_status['within_limits']:
+            #     print("[ALERT] Position limits exceeded!")
+            #     emergency_position_flatten()
+            #     sleep(2)
+            #     tick, status = get_tick_status()
+            #     continue
             
-            # Adaptive strategy selection
-            # strategies = adaptive_strategy_selection(positions_status, {})
-            strategies = 'tender_eval'
+            # # Adaptive strategy selection
+            # # strategies = adaptive_strategy_selection(positions_status, {})
+            # strategies = 'tender_eval'
 
-            check_tender(converter)
+            # check_tender(converter)
             
             # Execute selected strategies
             # for strategy in strategies:
@@ -253,39 +256,39 @@ def main_fixed():
             #     sleep(0.5)
             
             # Adaptive sleep based on market activity and risk level
-            base_sleep = 1.0
+            # base_sleep = 1.0
             
-            if positions_status['risk_level'] == "HIGH":
-                sleep_duration = base_sleep * 3  # Slower when high risk
-            elif positions_status['risk_level'] == "MEDIUM": 
-                sleep_duration = base_sleep * 2  # Moderate pace
-            else:
-                sleep_duration = base_sleep  # Normal pace
+            # if positions_status['risk_level'] == "HIGH":
+            #     sleep_duration = base_sleep * 3  # Slower when high risk
+            # elif positions_status['risk_level'] == "MEDIUM": 
+            #     sleep_duration = base_sleep * 2  # Moderate pace
+            # else:
+            #     sleep_duration = base_sleep  # Normal pace
                 
-            sleep(sleep_duration)
+            # sleep(sleep_duration)
             
-            # Update status
-            tick, status = get_tick_status()
+            # # Update status
+            # tick, status = get_tick_status()
             
-            # Reset error counter on successful loop
-            consecutive_errors = 0
+            # # Reset error counter on successful loop
+            # consecutive_errors = 0
             
-        except KeyboardInterrupt:
-            print("\n[INTERRUPT] Graceful shutdown initiated...")
-            emergency_position_flatten()
-            break
+        # except KeyboardInterrupt:
+        #     print("\n[INTERRUPT] Graceful shutdown initiated...")
+        #     emergency_position_flatten()
+        #     break
             
-        except Exception as e:
-            consecutive_errors += 1
-            print(f"[ERROR] Main loop exception ({consecutive_errors}/{max_consecutive_errors}): {e}")
+        # except Exception as e:
+        #     consecutive_errors += 1
+        #     print(f"[ERROR] Main loop exception ({consecutive_errors}/{max_consecutive_errors}): {e}")
             
-            if consecutive_errors >= max_consecutive_errors:
-                print("[CRITICAL] Too many consecutive errors - emergency shutdown")
-                emergency_position_flatten()
-                break
+        #     if consecutive_errors >= max_consecutive_errors:
+        #         print("[CRITICAL] Too many consecutive errors - emergency shutdown")
+        #         emergency_position_flatten()
+        #         break
                 
-            sleep(2)
-            tick, status = get_tick_status()
+        #     sleep(2)
+        #     tick, status = get_tick_status()
     
     # Final cleanup and reporting
     print(f"\n=== TRADING SESSION COMPLETE ===")
