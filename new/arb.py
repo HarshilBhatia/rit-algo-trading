@@ -5,7 +5,7 @@ import numpy as np
 class StatArbTrader:
     def __init__(self):
         self.positions = []
-        self.dev_window = 100
+        self.dev_window = 30
         self.recent_devs = []
         self.max_size = 1000
         self.max_hold_time = 300    # 5 minutes
@@ -103,14 +103,14 @@ class StatArbTrader:
         except:
             return False
 
-    def should_exit(self, pos, data, mean):
+    def should_exit(self, pos, data, mean, std):
         holding_time = time.time() - pos['entry_time']
         current_dev = data['spread']
 
         # Exit when spread crosses mean (mean reversion)
-        if pos['direction'] == "SHORT" and current_dev <= mean:
+        if pos['direction'] == "SHORT" and current_dev <= mean + std:
             return True, "mean_reversion"
-        if pos['direction'] == "LONG" and current_dev >= mean:
+        if pos['direction'] == "LONG" and current_dev >= mean - std:
             return True, "mean_reversion"
 
         # Time limit exit
@@ -193,14 +193,15 @@ class StatArbTrader:
 
         # Manage existing positions
         for pos in self.positions[:]:
-            should_exit, reason = self.should_exit(pos, data, mean)
+            should_exit, reason = self.should_exit(pos, data, mean, std)
             if should_exit:
                 self.exit_position(pos, data, reason)
 
         # Enter new position if none active
         if len(self.positions) == 0:
-            size = 100  # or self.max_size
+            size = 5000  # or self.max_size
             dev = data['spread']
+            print(mean, std, dev)
             if dev >= mean + 2 * std:
                 self.enter_position(data, size, "SHORT")
             elif dev <= mean - 2 * std:
