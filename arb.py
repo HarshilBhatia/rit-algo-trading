@@ -92,24 +92,78 @@ class StatArbTrader:
             print(f"Entry error: {e}")
             return False
 
+    # def should_exit(self, pos, data, mean_short, std_short, mean_long, std_long):
+    #     holding_time = time.time() - pos['entry_time']
+    #     if pos['direction'] == "SHORT":
+    #         current_spread = data['spread_short']
+           
+    #         if current_spread <= mean_short + std_short:
+    #             print(f"[SELLING SHORT] {mean_short} {std_short}", current_spread)
+    #             return True, "mean_reversion"
+    #     else:
+    #         current_spread = data['spread_long']
+
+    #         if current_spread >= mean_long - std_long:
+    #             print(f"[SELLING long] {mean_long} {std_long}", current_spread)
+    #             return True, "mean_reversion"
+
+    #     if holding_time > self.max_hold_time:
+    #         return True, "time"
+
+    #     return False, None
+    
     def should_exit(self, pos, data, mean_short, std_short, mean_long, std_long):
         holding_time = time.time() - pos['entry_time']
-        if pos['direction'] == "SHORT":
+        profit_threshold = 10  # Set your profit threshold here
+
+        # Calculate current market exit prices (simulate closing the position now)
+        size = pos['size']
+        direction = pos['direction']
+        entry = pos['entry_trades']
+
+        if direction == "SHORT":
+            # Simulate closing SHORT: buy ETF at ask, buy USD at ask, sell BULL/Bear at bid
+            etf_exit_price = data['ritc_ask']
+            usd_exit_price = data['usd_ask']
+            bull_exit_price = data['bull_bid']
+            bear_exit_price = data['bear_bid']
+
+            etf_pnl = (entry['etf']['vwap'] - etf_exit_price) * size * entry['usd']['vwap']
+            bull_pnl = (bull_exit_price - entry['bull']['vwap']) * size
+            bear_pnl = (bear_exit_price - entry['bear']['vwap']) * size
+        else:
+            # Simulate closing LONG: sell ETF at bid, sell USD at bid, buy BULL/Bear at ask
+            etf_exit_price = data['ritc_bid']
+            usd_exit_price = data['usd_bid']
+            bull_exit_price = data['bull_ask']
+            bear_exit_price = data['bear_ask']
+
+            etf_pnl = (etf_exit_price - entry['etf']['vwap']) * size * entry['usd']['vwap']
+            bull_pnl = (entry['bull']['vwap'] - bull_exit_price) * size
+            bear_pnl = (entry['bear']['vwap'] - bear_exit_price) * size
+
+        total_pnl = etf_pnl + bull_pnl + bear_pnl
+        total_pnl -= size * 0.06  # fees
+
+        if total_pnl > profit_threshold:
+            print(f"[EXIT PROFIT] {direction} PnL: {total_pnl:.2f} > {profit_threshold}")
+            return True, "profit"
+
+        # Existing mean reversion logic
+        if direction == "SHORT":
             current_spread = data['spread_short']
-           
             if current_spread <= mean_short + std_short:
                 print(f"[SELLING SHORT] {mean_short} {std_short}", current_spread)
                 return True, "mean_reversion"
         else:
             current_spread = data['spread_long']
-
             if current_spread >= mean_long - std_long:
                 print(f"[SELLING long] {mean_long} {std_long}", current_spread)
                 return True, "mean_reversion"
 
         if holding_time > self.max_hold_time:
-            return True, "time"
-
+            return True, 'time'
+        
         return False, None
 
     def exit_position(self, pos, direction):
