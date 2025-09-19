@@ -28,6 +28,8 @@ class EvaluateTenders():
             self._add_converter_sell_opportunities(bull_depth['bids'], bear_depth['bids'], usd_bid)
 
         self.opportunities.sort(key=lambda x: x['profit_per_share'], reverse=True)
+
+        print(tabulate(self.opportunities))
         
         executed, total_profit, = 0, 0
         for opp in self.opportunities:
@@ -39,7 +41,7 @@ class EvaluateTenders():
 
         avg_profit = total_profit / executed if executed else 0
         
-        return avg_profit
+        return total_profit
 
 
     def _add_direct_buy_opportunities(self, ritc_asks, usd_bid, usd_ask):
@@ -83,15 +85,11 @@ class EvaluateTenders():
                 'price': net_rev, 'quantity': qty, 'profit_per_share': profit
             })
         
-    def accept_and_unwind_tender(self):
+    def unwind_tender(self):
         """Accept tender and intelligently unwind position"""
         
         # Accept the tender first
-        if not accept_tender(self.tender):
-            print(f"[ERROR] Failed to accept tender {self.tender['tender_id']}")
-            return False
-        
-        print(f"✓ Accepted tender {self.tender['tender_id']}")
+       
         
         # Now we have a position to unwind
         remaining_qty = self.quantity
@@ -336,12 +334,16 @@ def check_tender(converter):
         
         T = EvaluateTenders(tender, converter)
         eval_result = T.evaluate_tender_profit()
+
+        print('estimated profit:', eval_result)
         
-        if eval_result['profitable']:
-            print(f"✓ ACCEPTING tender {tender['tender_id']}: profit {eval_result['profit']:.2f} CAD")
+        if eval_result > 1000:
+            print(f"✓ ACCEPTING tender {tender['tender_id']}: profit {eval_result} CAD")
             
-            success = T.accept_and_unwind_tender()
+            return False
+            success = accept_tender(tender)
             if success:
+                T.unwind_tender()
                 print(f"✓ Successfully processed tender {tender['tender_id']}")
             else:
                 print(f"⚠ Partially processed tender {tender['tender_id']}")
@@ -363,7 +365,7 @@ def test_fixed_converter_cost():
         'action': 'BUY', 
         'price': 24.0,
         'quantity': 5000
-    }
+    }-
     
     T = EvaluateTenders(mock_tender, None)
     
