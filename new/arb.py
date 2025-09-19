@@ -45,15 +45,14 @@ class StatArbTrader:
     
     def calc_position_size(self, deviation_pct):
         """Calculate optimal position size"""
-        base_size = min(self.max_size, max(100, int(abs(deviation_pct) * 200)))
+        # base_size = min(self.max_size, max(100, int(abs(deviation_pct) * 200)))
+        base_size = 100
         
         # Ensure profit > transaction costs (3 trades × $0.02/share)
-        min_profit = 10  # CAD
+        min_profit = 0  # CAD
         transaction_cost = base_size * 0.06
         
-        if abs(deviation_pct) * base_size / 100 < (transaction_cost + min_profit):
-            return 0  # Not profitable enough
-            
+        print('expected profit:', deviation_pct*base_size - transaction_cost)
         return base_size
     
     def enter_position(self, data, size):
@@ -75,11 +74,13 @@ class StatArbTrader:
                 'size': size,
                 'entry_time': time.time(),
                 'entry_deviation': deviation,
+                'deviation_pct': data['deviation_pct'],
                 'stop_loss': deviation * (1 + self.stop_loss_mult * np.sign(deviation))
             }
             self.positions.append(position)
             print(f"StatArb: {direction} {size} shares, dev={deviation:.3f}")
             return True
+
         return False
     
     def short_etf_long_basket(self, size, data):
@@ -113,7 +114,6 @@ class StatArbTrader:
             etf_result = place_mkt(RITC, "BUY", size)            
             usd = etf_result['vwap'] * size
             fx_result = place_mkt(USD, "BUY", usd)            
-
             return bool(etf_result)
         except:
             return False
@@ -124,7 +124,9 @@ class StatArbTrader:
         holding_time = time.time() - pos['entry_time']
         
         # Mean reversion exit
-        if current_dev_pct < self.exit_threshold:
+        if abs(pos['deviation_pct'] -data['deviation_pct']) > 0.2:
+            # this is so meh, should do something better. 
+            # historically store reversion. 
             return True, "reversion"
             
         # Time limit exit
@@ -216,22 +218,19 @@ class StatArbTrader:
         # Enter new position if none active
         if len(self.positions) == 0:
             deviation_pct = abs(data['deviation_pct'])
+            if deviation_pct > 0.3:
+                size = 1000 
+                print(deviation_pct, end = ' ')
+                self.enter_position(data, size)
+
+                # print(data['deviation_pct'])
             
-            if deviation_pct > self.entry_threshold:
-                size = self.calc_position_size(deviation_pct)
-                if size > 0:
-                    self.enter_position(data, size)
+            # if deviation_pct > self.entry_threshold:
+            #     size = self.calc_position_size(deviation_pct)
+            #     print(size)
+            #     if size > 0:
+            #         self.enter_position(data, size)
 
-# Global instance
-# stat_trader = StatArbTrader()
-
-# def run_stat_arb():
-#     """Main entry point for strategy"""
-#     stat_trader.run_strategy()
-
-# def get_stat_arb_status():
-#     """Get strategy status"""
-#     return len(stat_trader.positions)
 
 if __name__ == "__main__":
     # Test

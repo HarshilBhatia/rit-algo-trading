@@ -179,6 +179,7 @@ class EvaluateTenders():
             if self.action == 'SELL':
                 # Buy RITC to cover short
                 _, qty = get_top_level_price_and_qty(RITC, "BUY")
+                qty = min(qty, MAX_SIZE_EQUITY)
                 result = place_mkt(RITC, "BUY", qty)
                 if result and result.get('vwap', 0) > 0:
                     print(f"✓ Bought {qty} RITC at {result['vwap']:.4f} USD")
@@ -186,6 +187,8 @@ class EvaluateTenders():
             else:
                 # Sell RITC
                 _, qty = get_top_level_price_and_qty(RITC, "SELL")
+                qty = min(qty, MAX_SIZE_EQUITY)
+
                 result = place_mkt(RITC, "SELL", qty)
                 if result and result.get('vwap', 0) > 0:
                     print(f"✓ Sold {qty} RITC at {result['vwap']:.4f} USD")
@@ -239,147 +242,6 @@ class EvaluateTenders():
             print(f"[ERROR] Converter unwind failed: {e}")
             return 0, 0
         
-    # def calculate_direct_cost(self):
-    #     """Calculate cost of direct ETF trading"""
-    #     usd_bid, usd_ask, _, _ = best_bid_ask(USD)
-        
-    #     if self.action == 'SELL':
-    #         # We're short RITC, need to buy RITC directly
-    #         ritc_ask_price, qty = get_top_level_price_and_qty(RITC, "BUY")
-
-    #         etf_cost_usd = ritc_ask_price * qty + qty * FEE_MKT
-    #         fx_cost_cad = etf_cost_usd * usd_ask  # Need to buy USD at ask
-
-    #         return fx_cost_cad
-    #     else: 
-    #         ritc_bid_price, qty = get_top_level_price_and_qty(RITC, "SELL")
-    #         # This actually gives us USD, so it's negative cost (revenue)
-    #         etf_revenue_usd = ritc_bid_price * qty - qty * FEE_MKT
-    #         fx_revenue_cad = etf_revenue_usd * usd_bid  # Sell USD at bid
-    #         return -fx_revenue_cad  # Negative because it's revenue
-
-    # def calculate_converter_cost(self):
-    #     """FIXED: Calculate cost of converter method with proportional pricing"""
-        
-    #     # FIXED: Only reject if quantity exceeds maximum batch size
-        
-    #     usd_bid, usd_ask, _, _ = best_bid_ask(USD)
-        
-    #     if self.action == 'SELL':
-    #         # We're short RITC: Buy stocks → Convert to RITC
-    #         bull_ask_price, qty = get_top_level_price_and_qty(BULL, "BUY")
-    #         bear_ask_price, qty = get_top_level_price_and_qty(BEAR, "BUY")
-            
-    #         stock_cost_cad = (bull_ask_price + bear_ask_price) * qty + qty * 2 * FEE_MKT
-            
-    #         conversion_fee_cad = 1500 * (qty / CONVERTER_BATCH)
-            
-    #         return stock_cost_cad + conversion_fee_cad
-            
-    #     else:  # BUY tender
-    #         # We're long RITC: Convert RITC → Sell stocks
-    #         bull_bid_price, bull_max = get_top_level_price_and_qty(BULL, "SELL") 
-    #         bear_bid_price, bear_max = get_top_level_price_and_qty(BEAR, "SELL")
-    #         # This gives us revenue from stocks, costs conversion fee
-    #         stock_revenue_cad = (bull_bid_price + bear_bid_price) * qty - qty * 2 * FEE_MKT
-            
-    #         conversion_fee_cad = 1500 * (qty / CONVERTER_BATCH)
-            
-    #         return conversion_fee_cad - stock_revenue_cad  # Net cost
-
-    # def execute_direct_unwind(self):
-    #     """Execute direct ETF trading"""
-    #     try:
-    #         if self.action == 'SELL':
-    #             # Buy RITC to cover short
-    #             _, qty = get_top_level_price_and_qty(RITC, "BUY")
-    #             result = place_mkt(RITC, "BUY", qty)
-
-    #             if result and result.get('vwap', 0) > 0:
-    #                 print(f"✓ Bought {qty} RITC at {result['vwap']:.4f} USD")
-    #                 return result['vwap'], qty
-                    
-    #         else:  # BUY tender
-    #             # Sell RITC
-    #             _, qty = get_top_level_price_and_qty(RITC, "SELL")
-    #             result = place_mkt(RITC, "SELL", qty)
-    #             if result and result.get('vwap', 0) > 0:
-    #                 print(f"✓ Sold {qty} RITC at {result['vwap']:.4f} USD")
-    #                 return result['vwap'], qty
-                    
-    #         return 0,0
-            
-    #     except Exception as e:
-    #         print(f"[ERROR] Direct unwind failed: {e}")
-    #         return 0,0
-
-    # def execute_converter_unwind(self):
-    #     """Execute converter-based unwinding - can handle any amount up to 10k"""
-        
-    #     try:
-    #         if self.action == 'SELL':
-    #             # We're short RITC: Buy stocks → Convert to RITC
-                
-    #             # Step 1: Buy stocks
-    #             _, qty_bull = get_top_level_price_and_qty(BULL, "BUY")
-    #             _, qty_bear = get_top_level_price_and_qty(BEAR, "BUY")
-
-    #             qty = min(qty_bull, qty_bear)
-    #             bull_result = place_mkt(BULL, "BUY", qty)
-    #             bear_result = place_mkt(BEAR, "BUY", qty)
-                
-    #             if not bull_result or not bear_result:
-    #                 print("[ERROR] Failed to buy stocks")
-    #                 return 0,0
-                
-    #             print(f"✓ Bought {qty} BULL and BEAR")
-    #             sleep(1)  # Allow orders to settle
-                
-    #             # Step 2: Convert to RITC
-    #             conversion_result = self.converter.convert_bull_bear(qty)
-    #             if not conversion_result or not conversion_result.ok:
-    #                 print(f"[ERROR] ETF creation failed")
-    #                 # Emergency: sell the stocks we just bought
-    #                 place_mkt(BULL, "SELL", qty)
-    #                 place_mkt(BEAR, "SELL", qty)
-    #                 return 0,0
-                
-    #             print(f"✓ Converted {qty} stocks to RITC (cost: {1500 * qty / CONVERTER_BATCH:.2f} CAD)")
-    #             return bull_result['vwap'] + bear_result['vwap'] - qty * 1500/CONVERTER_BATCH, qty
-                
-    #         else:  # BUY tender
-    #             # We're long RITC: Convert RITC → Sell stocks
-                
-    #             # Step 1: Convert RITC to stocks
-
-    #             _, qty_bull = get_top_level_price_and_qty(BULL, "SELL")
-    #             _, qty_bear = get_top_level_price_and_qty(BEAR, "SELL")
-
-    #             qty = min(qty_bull, qty_bear)
-
-    #             conversion_result = self.converter.convert_ritc(qty)
-    #             if not conversion_result or not conversion_result.ok:
-    #                 print(f"[ERROR] ETF redemption failed")
-    #                 return False
-                    
-    #             print(f"✓ Converted {qty} RITC to stocks (cost: {1500 * qty / CONVERTER_BATCH:.2f} CAD)")
-    #             sleep(1)  # Allow conversion to settle
-                
-    #             # Step 2: Sell stocks
-    #             bull_result = place_mkt(BULL, "SELL", qty)
-    #             bear_result = place_mkt(BEAR, "SELL", qty)
-                
-    #             if not bull_result or not bear_result:
-    #                 print("[WARNING] Failed to sell some stocks")
-    #                 # Don't return False - we still made progress
-                    
-    #             print(f"✓ Sold {qty} BULL and BEAR")
-    #             return bull_result['vwap'] + bear_result['vwap'] - qty * 1500/CONVERTER_BATCH, qty 
-                
-    #     except Exception as e:
-    #         print(f"[ERROR] Converter unwind failed: {e}")
-    #         return 0,0
-
     def cleanup_fx_exposure(self):
         """Clean up any residual USD exposure"""
         try:
