@@ -15,6 +15,7 @@ from final_utils import *
 from tender_eval import check_tender
 from fixed_arbitrage import check_conversion_arbitrage_fixed, statistical_arbitrage_fixed
 from arb import StatArbTrader
+from arb2 import ETFArbitrageTrader
 
 def main():
     """FIXED: Main trading loop with comprehensive error handling and monitoring"""
@@ -36,7 +37,8 @@ def main():
     
     tick, status = get_tick_status()
     
-    arb = StatArbTrader()
+    # arb = StatArbTrader()
+    arb = ETFArbitrageTrader()
     while status == "ACTIVE" and consecutive_errors < max_consecutive_errors:
         loop_count += 1
         current_time = time.time()
