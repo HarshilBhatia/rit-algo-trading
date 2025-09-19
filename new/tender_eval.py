@@ -55,9 +55,9 @@ class EvaluateTenders():
 
     def _add_converter_buy_opportunities(self, bull_asks, bear_asks, usd_bid):
         for bull, bear in zip(bull_asks, bear_asks):
-            qty = min(bull['quantity'], bear['quantity'], CONVERTER_BATCH)
+            qty = min(bull['quantity'], bear['quantity'])
             if qty <= 0: continue
-            total_cost = bull['price'] + bear['price'] + 2 * FEE_MKT + 1500 / CONVERTER_BATCH
+            total_cost = bull['price'] + bear['price'] + 2 * FEE_MKT + conversion_cost(1)
             profit = self.price * usd_bid - total_cost
             self.opportunities.append({
                 'type': 'CONVERTER_BUY',
@@ -78,7 +78,7 @@ class EvaluateTenders():
         for bull, bear in zip(bull_bids, bear_bids):
             qty = min(bull['quantity'], bear['quantity'], CONVERTER_BATCH)
             if qty <= 0: continue
-            net_rev = bull['price'] + bear['price'] - 2 * FEE_MKT - 1500 / CONVERTER_BATCH
+            net_rev = bull['price'] + bear['price'] - 2 * FEE_MKT + conversion_cost(1) 
             profit = net_rev - self.price * usd_bid
             self.opportunities.append({
                 'type': 'CONVERTER_SELL',
@@ -202,7 +202,7 @@ class EvaluateTenders():
                 # We're short RITC: Buy stocks → Convert to RITC
                 _, qty_bull = get_top_level_price_and_qty(BULL, "BUY")
                 _, qty_bear = get_top_level_price_and_qty(BEAR, "BUY")
-                qty = min(qty_bull, qty_bear)
+                qty = min(qty_bull, qty_bear, MAX_SIZE_EQUITY)
                 bull_result = place_mkt(BULL, "BUY", qty)
                 bear_result = place_mkt(BEAR, "BUY", qty)
                 if not bull_result or not bear_result:
@@ -216,25 +216,25 @@ class EvaluateTenders():
                     place_mkt(BULL, "SELL", qty)
                     place_mkt(BEAR, "SELL", qty)
                     return 0, 0
-                print(f"✓ Converted {qty} stocks to RITC (cost: {self._conversion_fee(qty):.2f} CAD)")
-                return bull_result['vwap'] + bear_result['vwap'] - self._conversion_fee(qty), qty
+                print(f"✓ Converted {qty} stocks to RITC (cost: {conversion_cost(qty):.2f} CAD)")
+                return bull_result['vwap'] + bear_result['vwap'] - conversion_cost(qty), qty
             else:
                 # We're long RITC: Convert RITC → Sell stocks
                 _, qty_bull = get_top_level_price_and_qty(BULL, "SELL")
                 _, qty_bear = get_top_level_price_and_qty(BEAR, "SELL")
-                qty = min(qty_bull, qty_bear)
+                qty = min(qty_bull, qty_bear, MAX_SIZE_EQUITY)
                 conversion_result = self.converter.convert_ritc(qty)
                 if not conversion_result or not conversion_result.ok:
                     print(f"[ERROR] ETF redemption failed")
                     return 0, 0
-                print(f"✓ Converted {qty} RITC to stocks (cost: {self._conversion_fee(qty):.2f} CAD)")
+                print(f"✓ Converted {qty} RITC to stocks (cost: {conversion_cost(qty):.2f} CAD)")
                 sleep(1)  # Allow conversion to settle
                 bull_result = place_mkt(BULL, "SELL", qty)
                 bear_result = place_mkt(BEAR, "SELL", qty)
                 if not bull_result or not bear_result:
                     print("[WARNING] Failed to sell some stocks")
                 print(f"✓ Sold {qty} BULL and BEAR")
-                return bull_result['vwap'] + bear_result['vwap'] - self._conversion_fee(qty), qty
+                return bull_result['vwap'] + bear_result['vwap'] - conversion_cost(qty), qty
         except Exception as e:
             print(f"[ERROR] Converter unwind failed: {e}")
             return 0, 0
@@ -423,8 +423,6 @@ def check_tender(converter):
         
         if eval_result > 1000:
             print(f"✓ ACCEPTING tender {tender['tender_id']}: profit {eval_result} CAD")
-            
-            return False
             success = accept_tender(tender)
             if success:
                 T.unwind_tender()
@@ -449,7 +447,7 @@ def test_fixed_converter_cost():
         'action': 'BUY', 
         'price': 24.0,
         'quantity': 5000
-    }-
+    }
     
     T = EvaluateTenders(mock_tender, None)
     

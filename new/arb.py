@@ -109,11 +109,10 @@ class StatArbTrader:
             if not (bull_result and bear_result): return False
             
             # Convert CAD to USD → buy ETF
-            usd_needed = data['ritc_ask'] * size * 1.02
-            fx_result = place_mkt(USD, "BUY", usd_needed)
-            if not fx_result: return False
-            
+            usd_needed = data['ritc_ask'] * size
+            fx_result = place_mkt(USD, "BUY", usd_needed)            
             etf_result = place_mkt(RITC, "BUY", size)
+
             return bool(etf_result)
         except:
             return False
@@ -166,7 +165,7 @@ class StatArbTrader:
         """Close short ETF position"""
         try:
             # Get USD → buy ETF
-            usd_needed = data['ritc_ask'] * size * 1.02
+            usd_needed = data['ritc_ask'] * size
             fx_result = place_mkt(USD, "BUY", usd_needed)
             if not fx_result: return False
             
@@ -224,15 +223,15 @@ class StatArbTrader:
                     self.enter_position(data, size)
 
 # Global instance
-stat_trader = StatArbTrader()
+# stat_trader = StatArbTrader()
 
-def run_stat_arb():
-    """Main entry point for strategy"""
-    stat_trader.run_strategy()
+# def run_stat_arb():
+#     """Main entry point for strategy"""
+#     stat_trader.run_strategy()
 
-def get_stat_arb_status():
-    """Get strategy status"""
-    return len(stat_trader.positions)
+# def get_stat_arb_status():
+#     """Get strategy status"""
+#     return len(stat_trader.positions)
 
 if __name__ == "__main__":
     # Test
