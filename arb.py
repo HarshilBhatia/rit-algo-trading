@@ -48,8 +48,8 @@ class StatArbTrader:
             self.recent_devs.pop(0)
 
     def calc_mean_std(self):
-        if len(self.recent_devs) < 20:
-            return None, None, None, None
+        # if len(self.recent_devs) < 20:
+        #     return None, None, None, None
         arr = np.array(self.recent_devs)
         mean_short = np.mean(arr[:,0])
         std_short = np.std(arr[:,0])
@@ -145,21 +145,22 @@ class StatArbTrader:
         total_pnl = etf_pnl + bull_pnl + bear_pnl
         total_pnl -= size * 0.06  # fees
 
+        print(total_pnl)
         if total_pnl > profit_threshold:
             print(f"[EXIT PROFIT] {direction} PnL: {total_pnl:.2f} > {profit_threshold}")
             return True, "profit"
 
         # Existing mean reversion logic
-        if direction == "SHORT":
-            current_spread = data['spread_short']
-            if current_spread <= mean_short + std_short:
-                print(f"[SELLING SHORT] {mean_short} {std_short}", current_spread)
-                return True, "mean_reversion"
-        else:
-            current_spread = data['spread_long']
-            if current_spread >= mean_long - std_long:
-                print(f"[SELLING long] {mean_long} {std_long}", current_spread)
-                return True, "mean_reversion"
+        # if direction == "SHORT":
+        #     current_spread = data['spread_short']
+        #     if current_spread <= mean_short + std_short:
+        #         print(f"[SELLING SHORT] {mean_short} {std_short}", current_spread)
+        #         return True, "mean_reversion"
+        # else:
+        #     current_spread = data['spread_long']
+        #     if current_spread >= mean_long - std_long:
+        #         print(f"[SELLING long] {mean_long} {std_long}", current_spread)
+        #         return True, "mean_reversion"
 
         if holding_time > self.max_hold_time:
             return True, 'time'
@@ -215,13 +216,15 @@ class StatArbTrader:
             return
 
         data = self.get_market_data()
+        print(data['spread_short'], data['spread_long'])
+
         if not data:
             return
 
         self.update_spread_history(data['spread_short'], data['spread_long'])
         mean_short, std_short, mean_long, std_long = self.calc_mean_std()
-        if mean_short is None:
-            return
+        # if mean_short is None:
+        #     return
 
         # Manage existing positions
         # for pos in self.positions[:]:
@@ -240,12 +243,15 @@ class StatArbTrader:
 
         # Enter new position if none active
         # if len(self.positions) == 0:
+
         if not self.positions:
             size = 5000  # or self.max_size
             
-            if data['spread_short'] >= mean_short + 2 * std_short:
-                print(f"[SHORT] sprea{mean_short} {std_short}", data['spread_short'])
+            # if data['spread_short'] >= mean_short + 2 * std_short:
+            if data['spread_short'] >= 0.5:
+                # print(f"[SHORT] sprea{mean_short} {std_short}", data['spread_short'])
                 self.enter_position(size, "SHORT")
-            elif data['spread_long'] <= mean_long - 2 * std_long:
-                print(f"[LONG] {mean_long} {std_long}", data['spread_short'])
+            # elif data['spread_long'] <= mean_long - 2 * std_long:
+            elif data['spread_long'] <= -0.5:
+                # print(f"[LONG] {mean_long} {std_long}", data['spread_short'])
                 self.enter_position(size, "LONG")

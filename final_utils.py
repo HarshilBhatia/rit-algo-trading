@@ -227,6 +227,12 @@ def get_position_limits_impact(projected_ritc_change=0, projected_bull_change=0,
     return gross < MAX_GROSS and MAX_SHORT_NET < net < MAX_LONG_NET
 
 # IMPROVED: Smart order placement with retry logic
+
+def place_limit(ticker,action, qty, price):
+    return s.post(f"{API}/orders",
+                         params={"ticker": ticker, "type": "LIMIT",
+                               "quantity": int(qty), "action": action, "price":price}).json()
+
 def place_mkt(ticker, action, qty):
     """Enhanced market order placement with error handling"""
     if qty <= 0:
@@ -296,7 +302,7 @@ def get_leases():
     return s.get(f"{API}/leases")
 
 # IMPROVED: Smart FX hedging with chunking
-def hedge_fx(action, qty):
+def fx_hedge(action, qty):
     """Enhanced FX hedging with optimal execution"""
     if qty <= 0:
         return

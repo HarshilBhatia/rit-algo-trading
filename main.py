@@ -42,8 +42,8 @@ def main():
     while status == "ACTIVE" and consecutive_errors < max_consecutive_errors:
         loop_count += 1
         current_time = time.time()
-        # check_tender(converter)
-        arb.run_strategy()
+        check_tender(converter)
+        # arb.run_strategy()
 
         tick, status = get_tick_status()
         sleep(0.5)
