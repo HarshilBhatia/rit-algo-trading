@@ -109,9 +109,10 @@ class StatArbTrader:
             if not (bull_result and bear_result): return False
             
             # Convert CAD to USD → buy ETF
-            usd_needed = data['ritc_ask'] * size
-            fx_result = place_mkt(USD, "BUY", usd_needed)            
-            etf_result = place_mkt(RITC, "BUY", size)
+            # usd_needed = data['ritc_ask'] * size
+            etf_result = place_mkt(RITC, "BUY", size)            
+            usd = etf_result['vwap'] * size
+            fx_result = place_mkt(USD, "BUY", usd)            
 
             return bool(etf_result)
         except:
@@ -165,12 +166,11 @@ class StatArbTrader:
         """Close short ETF position"""
         try:
             # Get USD → buy ETF
-            usd_needed = data['ritc_ask'] * size
-            fx_result = place_mkt(USD, "BUY", usd_needed)
-            if not fx_result: return False
-            
-            etf_result = place_mkt(RITC, "BUY", size)
+            etf_result = place_mkt(RITC, "BUY", size)     
             if not etf_result: return False
+
+            usd = etf_result['vwap'] * size
+            fx_result = place_mkt(USD, "BUY", usd)                        
             
             # Sell basket
             bull_result = place_mkt(BULL, "SELL", size)
