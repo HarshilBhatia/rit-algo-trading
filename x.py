@@ -417,3 +417,112 @@ def check_tender(converter):
             print(f"✗ Rejecting tender {tender['tender_id']}")
             print(f"  Profit: {eval_result['profit']:.2f} CAD (threshold: {MIN_TENDER_PROFIT_CAD})")
             print(f"  Execution rate: {eval_result['execution_rate']*100:.1f}%")
+
+
+*** [TENDER EVAL] BUY 75000.0 @ 24.9500 USD ***
+✓ ACCEPTING tender 2178: profit 16115.374999999993 CAD
+
+*********************** [STARTING ADAPTIVE UNWIND] ***********************
+Decision Point: Direct Cost=$-25.0423 CAD vs Converter Cost=$-25.0700 CAD
+
+✓ Choosing CONVERTER method for 8600.0 shares.
+--- Executing SELL 8600.0 BULL (Patient Aggressor) ---
+Placing PASSIVE limit order at 10.0200...
+No/partial fill. Going AGGRESSIVE on remaining 8600 shares.
+✓ Executed remaining 8600.0 shares aggressively.
+✓ Slice Complete: Filled 8600.0 / 8600.0 @ avg price 9.8228
+--- Executing SELL 8600.0 BEAR (Patient Aggressor) ---
+Placing PASSIVE limit order at 15.5400...
+No/partial fill. Going AGGRESSIVE on remaining 8600 shares.
+✓ Executed remaining 8600.0 shares aggressively.
+✓ Slice Complete: Filled 8600.0 / 8600.0 @ avg price 15.3100
+Hedged FX: BUY 214570.00 USD
+Hedged FX: BUY 1290.00 USD
+✓ Converted 8600.0 shares.
+--- 66400.0 shares remaining. Waiting 2.0s... ---
+Decision Point: Direct Cost=$-25.1532 CAD vs Converter Cost=$-24.9600 CAD
+
+✓ Choosing DIRECT method for 8400.0 shares.
+--- Executing SELL 8400.0 RITC (Patient Aggressor) ---
+Placing PASSIVE limit order at 25.0700...
+No/partial fill. Going AGGRESSIVE on remaining 8400 shares.
+✓ Executed remaining 8400.0 shares aggressively.
+✓ Slice Complete: Filled 8400.0 / 8400.0 @ avg price 24.8700
+--- 58000.0 shares remaining. Waiting 2.0s... ---
+Decision Point: Direct Cost=$-25.1871 CAD vs Converter Cost=$-24.8700 CAD
+
+✓ Choosing DIRECT method for 10000 shares.
+--- Executing SELL 10000 RITC (Patient Aggressor) ---
+Placing PASSIVE limit order at 25.0300...
+No/partial fill. Going AGGRESSIVE on remaining 10000 shares.
+✓ Executed remaining 10000.0 shares aggressively.
+✓ Slice Complete: Filled 10000.0 / 10000 @ avg price 24.8200
+--- 48000.0 shares remaining. Waiting 2.0s... ---
+Decision Point: Direct Cost=$-25.0994 CAD vs Converter Cost=$-24.8100 CAD
+
+✓ Choosing DIRECT method for 10000 shares.
+--- Executing SELL 10000 RITC (Patient Aggressor) ---
+Placing PASSIVE limit order at 24.9900...
+No/partial fill. Going AGGRESSIVE on remaining 10000 shares.
+✓ Executed remaining 10000.0 shares aggressively.
+✓ Slice Complete: Filled 10000.0 / 10000 @ avg price 24.7500
+--- 38000.0 shares remaining. Waiting 2.0s... ---
+Decision Point: Direct Cost=$-25.0735 CAD vs Converter Cost=$-24.7700 CAD
+
+✓ Choosing DIRECT method for 9000.0 shares.
+--- Executing SELL 9000.0 RITC (Patient Aggressor) ---
+Placing PASSIVE limit order at 24.9400...
+No/partial fill. Going AGGRESSIVE on remaining 9000 shares.
+✓ Executed remaining 9000.0 shares aggressively.
+✓ Slice Complete: Filled 9000.0 / 9000.0 @ avg price 24.7067
+--- 29000.0 shares remaining. Waiting 2.0s... ---
+Decision Point: Direct Cost=$-24.9831 CAD vs Converter Cost=$-24.7500 CAD
+
+✓ Choosing DIRECT method for 9500.0 shares.
+--- Executing SELL 9500.0 RITC (Patient Aggressor) ---
+Placing PASSIVE limit order at 24.8000...
+No/partial fill. Going AGGRESSIVE on remaining 9500 shares.
+✓ Executed remaining 9500.0 shares aggressively.
+✓ Slice Complete: Filled 9500.0 / 9500.0 @ avg price 24.5769
+--- 19500.0 shares remaining. Waiting 2.0s... ---
+Decision Point: Direct Cost=$-25.0045 CAD vs Converter Cost=$-24.7500 CAD
+
+✓ Choosing DIRECT method for 10000 shares.
+--- Executing SELL 10000 RITC (Patient Aggressor) ---
+Placing PASSIVE limit order at 24.7800...
+No/partial fill. Going AGGRESSIVE on remaining 10000 shares.
+✓ Executed remaining 10000.0 shares aggressively.
+✓ Slice Complete: Filled 10000.0 / 10000 @ avg price 24.5500
+--- 9500.0 shares remaining. Waiting 2.0s... ---
+Decision Point: Direct Cost=$-24.9725 CAD vs Converter Cost=$-24.7500 CAD
+
+✓ Choosing DIRECT method for 5000 shares.
+--- Executing SELL 5000 RITC (Patient Aggressor) ---
+Placing PASSIVE limit order at 24.7100...
+No/partial fill. Going AGGRESSIVE on remaining 5000 shares.
+✓ Executed remaining 5000.0 shares aggressively.
+✓ Slice Complete: Filled 5000.0 / 5000 @ avg price 24.5100
+--- 4500.0 shares remaining. Waiting 2.0s... ---
+Decision Point: Direct Cost=$-24.9659 CAD vs Converter Cost=$-24.9600 CAD
+
+✓ Choosing DIRECT method for 4500.0 shares.
+--- Executing SELL 4500.0 RITC (Patient Aggressor) ---
+Placing PASSIVE limit order at 24.7300...
+No/partial fill. Going AGGRESSIVE on remaining 4500 shares.
+✓ Executed remaining 4500.0 shares aggressively.
+✓ Slice Complete: Filled 4500.0 / 4500.0 @ avg price 24.6509
+
+--- Finalizing FX Exposure ---
+Hedged FX: BUY 18579.00 USD
+✓ Final FX Cleanup: BUY 18579.00 USD.
+Perc of limit orders 0 / 10
+*********************** [UNWIND COMPLETE] ***********************
+✓ Successfully processed tender 2178
+--- FVE Initialized: Direct=$25.00, Synthetic=$25.15 ---
+*** [TENDER EVAL] SELL 93000.0 @ 24.8200 USD ***
+✓ ACCEPTING tender 3178: profit 1312.8035999999995 CAD
+
+*********************** [STARTING ADAPTIVE UNWIND] ***********************
+Decision Point: Direct Cost=$25.1838 CAD vs Converter Cost=$25.3600 CAD
+
+✓ Choosing DIRECT method for 98

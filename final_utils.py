@@ -86,7 +86,9 @@ def get_top_level_price_and_qty(ticker, action):
     Returns the price and quantity at the top of the book for the given action.
     For 'SELL', returns best bid; for 'BUY', returns best ask.
     """
+    # t = time.time() 
     book = best_bid_ask_entire_depth(ticker)
+    # print(time.time() - t, 'exec time')
     if action == 'SELL':
         levels = book['bids']
     else:
@@ -210,6 +212,8 @@ def get_usd_cad_spread():
     usd_bid, usd_ask, _, _ = best_bid_ask(USD)
     return usd_ask - usd_bid
 
+
+
 def positions_map():
     r = s.get(f"{API}/securities")
     r.raise_for_status()
@@ -217,6 +221,14 @@ def positions_map():
     for k in (BULL, BEAR, RITC, USD, CAD):
         out.setdefault(k, 0)
     return out
+
+
+def get_order_status(_id):
+    return s.get(f"{API}/orders/{_id}")
+
+
+def cancel_order(_id):
+    return s.delete(f"{API}/orders/{_id}")
 
 def get_position_limits_impact(projected_ritc_change=0, projected_bull_change=0, projected_bear_change=0):
     pos = positions_map()

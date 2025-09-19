@@ -13,6 +13,7 @@ from final_utils import *
 
 # Import the fixed modules
 from tender_eval import check_tender
+# from tender_new import check_tender
 from fixed_arbitrage import check_conversion_arbitrage_fixed, statistical_arbitrage_fixed
 from arb import StatArbTrader
 from arb2 import ETFArbitrageTrader
@@ -23,7 +24,6 @@ def main():
     print("=== FIXED ALGORITHMIC ETF ARBITRAGE SYSTEM ===")
     
 
-    converter = Converter()
    
     
     # Initial position report
@@ -35,18 +35,27 @@ def main():
     consecutive_errors = 0
     max_consecutive_errors = 5
     
-    tick, status = get_tick_status()
-    
-    arb = StatArbTrader()
-    # arb = ETFArbitrageTrader()
-    while status == "ACTIVE" and consecutive_errors < max_consecutive_errors:
-        loop_count += 1
-        current_time = time.time()
-        check_tender(converter)
-        # arb.run_strategy()
-
+    while True: 
         tick, status = get_tick_status()
-        sleep(0.5)
+
+        if status == 'ACTIVE':
+            converter = Converter()
+
+        
+        # arb = StatArbTrader()
+        # arb = ETFArbitrageTrader()
+        while status == "ACTIVE" and consecutive_errors < max_consecutive_errors:
+            # place_mkt(RITC, 'BUY', 1000)
+
+            sleep(3)
+            # place_mkt(RITC, 'SELL', 1000)
+            loop_count += 1
+            # current_time = time.time()
+            check_tender(converter)
+            # arb.run_strategy()
+
+            tick, status = get_tick_status()
+            sleep(0.5)
         
 
 if __name__ == "__main__":
