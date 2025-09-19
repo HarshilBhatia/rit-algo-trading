@@ -526,3 +526,39 @@ Perc of limit orders 0 / 10
 Decision Point: Direct Cost=$25.1838 CAD vs Converter Cost=$25.3600 CAD
 
 ✓ Choosing DIRECT method for 98
+
+
+
+
+
+    def unwind_pos(self):
+        """
+        Main controller for unwinding the tender position using an adaptive,
+        passive-aggressive limit order strategy with correct cost analysis and hedging.
+        """
+        
+        remaining_qty = self.quantity
+        print('234')
+
+        if remaining_qty == 0:
+            return True 
+    
+        side = "BUY" if self.action == 'SELL' else "SELL"
+        
+
+        # while remaining_qty > 0:
+        filled_qty, vwap = self._execute_direct(side, remaining_qty)
+        remaining_qty -= filled_qty
+
+        filled_qty, vwap = self._execute_converted(side, remaining_qty)
+        remaining_qty -= filled_qty
+        
+        if remaining_qty > 0 and filled_qty > 0:
+            delay = 0 # Replace with your intelligent delay if desired
+            print(f"--- {remaining_qty} shares remaining. Waiting {delay:.1f}s... ---")
+            time.sleep(delay)
+
+        if remaining_qty == 0:       
+            print(f"Perc of limit orders {self.num_limit_order} / {self.total_orders}")
+            print(f"*********************** [UNWIND COMPLETE] ***********************")
+        return True

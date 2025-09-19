@@ -215,11 +215,18 @@ def get_usd_cad_spread():
 
 def positions_map():
     r = s.get(f"{API}/securities")
+
     r.raise_for_status()
     out = {p["ticker"]: int(p.get("position", 0)) for p in r.json()}
     for k in (BULL, BEAR, RITC, USD, CAD):
         out.setdefault(k, 0)
     return out
+
+def pos_map_usd():
+    r = s.get(f"{API}/securities")
+    for p in r.json():
+        if p['ticker'] == RITC:
+            return p['position'], p['vwap']
 
 
 def get_order_status(_id):
@@ -357,7 +364,9 @@ class Converter():
         endpoint = f"{API}/leases/{self.redemption_id}"
         resp = s.post(endpoint, params={"from1": "RITC", "quantity1": int(qty_ritc), 
                                       "from2": "USD", "quantity2": int(1500*qty_ritc // 10000)})
+        print(resp.json())
         if not resp.ok:
+
             print(f"[RETRY]", end=' ')
             if itr < 10:
                 sleep(1.5)
@@ -371,6 +380,8 @@ class Converter():
         resp = s.post(endpoint, params={"from1": "BULL", "quantity1": int(qty), 
                                       "from2": "BEAR", "quantity2": int(qty), 
                                       "from3": "USD", "quantity3": int(1500*qty // 10000)})
+
+        print(resp.json())
         if not resp.ok:
             print(f"[RETRY]", end=' ')
             if itr < 10:
